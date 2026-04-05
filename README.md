@@ -1,222 +1,221 @@
-# GigaCommit - AI-Powered Git Commits for VSCode
+# GigaCommit - ИИ генерация коммитов
 
-GigaCommit is a Visual Studio Code extension that leverages artificial intelligence to generate meaningful, conventional-style commit messages based on your code changes. By integrating with GigaChat via the official Sber OAuth scheme, it analyzes your staged changes and suggests appropriate commit messages following the Conventional Commits specification.
+GigaCommit — это расширение для Visual Studio Code, использующее GigaChat для генерации содержательных комментариев к коммитам в соответствии со стандартами convential commits.
 
 ![GigaCommit demo](assets/demo.gif)
 
-## Features
+## Возможности
 
-✨ **AI-Powered Commit Messages** - Let GigaChat analyze your code changes and generate descriptive commit messages
+✨ **Комментарии с ИИ** — GigaChat анализирует изменения в коде и генерирует описательные комментарии
 
-🎯 **Conventional Commits** - All generated messages follow the Conventional Commits format for better project history
+🎯 **Conventional Commits** — все генерируемые сообщения следуют формату Conventional Commits для лучшей читаемости истории проекта
 
-⚡ **Seamless Integration** - Works directly within VSCode's Git interface
+⚡ **Интеграция** — работает напрямую в интерфейсе Git в VSCode
 
-🔐 **Secure** - Your code stays private; only diff information is sent to GigaChat API
+🔐 **Безопасность** — ваш код остаётся приватным; только diff отправляется в API GigaChat
 
-⚙️ **Configurable** - Easy to configure OAuth credentials and endpoints
+⚙️ **Настройка** — простая настройка учётных данных OAuth и конечных точек
 
-## Installation
+## Установка
 
-1. Open VSCode
-2. Go to Extensions view (Ctrl+Shift+X)
-3. Search for "GigaCommit"
-4. Click Install
+1. Откройте VSCode
+2. Перейдите во вкладку расширений (Ctrl+Shift+X)
+3. Найдите "GigaCommit"
+4. Нажмите Установить
 
-## Configuration
+## Настройка
 
-Before using GigaCommit, you'll need to configure GigaChat OAuth credentials:
+Перед использованием GigaCommit необходимо настроить учётные данные OAuth для GigaChat:
 
-1. Open VSCode Settings (Ctrl+,)
-2. Search for "GigaCommit"
-3. Configure the following settings:
+1. Откройте настройки VSCode (Ctrl+,)
+2. Найдите "GigaCommit"
+3. Настройте следующие параметры:
 
-| Setting | Description | Default |
+| Параметр | Описание | По умолчанию |
 |---|---|---|
-| `gigacommit.authorizationKey` | Base64-encoded authorization key (your API key for OAuth) | *required* |
-| `gigacommit.scope` | OAuth scope — dropdown: PERS / B2B / CORP. API base URL is selected automatically from this value | `GIGACHAT_API_PERS` |
-| `gigacommit.model` | GigaChat model — dropdown: GigaChat-2 / GigaChat-2-Pro / GigaChat-2-Max | `GigaChat-2-Pro` |
-| `gigacommit.caBundlePath` | Path to a PEM file with custom CA certificates (optional) | *(empty)* |
+| `gigacommit.authorizationKey` | Base64-закодированный ключ авторизации (ваш API-ключ для OAuth) | *обязательный* |
+| `gigacommit.scope` | Охват OAuth — выбрать: PERS / B2B / CORP. Базовый URL API выбирается автоматически по значению | `GIGACHAT_API_PERS` |
+| `gigacommit.model` | Модель GigaChat — выбрать: GigaChat-2 / GigaChat-2-Pro / GigaChat-2-Max | `GigaChat-2-Pro` |
+| `gigacommit.caBundlePath` | Путь к PEM-файлу с пользовательскими сертификатами CA (необязательно) | *(пусто)* |
 
-### Getting the authorization key
+### Получение ключа авторизации
 
-1. Register your application in the [GigaChat developers portal](https://developers.sber.ru).
-2. Go to **Settings** → **API Keys**.
-3. Copy your **Authorization Key**.
-4. Base64-encode it: `echo -n "key:value" | base64` (or use any online encoder).
+1. Зарегистрируйте приложение в [портале разработчиков GigaChat](https://developers.sber.ru).
+2. Перейдите в **Настройки** → **Ключи API**.
+3. Скопируйте свой **Ключ авторизации**.
 
-The `authorizationKey` should look like `NjE5MDhkYWUt...` (a Base64 string).
+Значение `authorizationKey` должно выглядеть как `NjE5MDhkYWUt...`
 
-### Which scope to use
+### Какой scope использовать
 
-| License type | `scope` | Selected automatically |
+| Тип лицензии | `scope` | Выбирается автоматически |
 |---|---|---|
-| Personal | `GIGACHAT_API_PERS` | `https://gigachat.devices.sberbank.ru/api/v1` |
+| Персональный | `GIGACHAT_API_PERS` | `https://gigachat.devices.sberbank.ru/api/v1` |
 | B2B | `GIGACHAT_API_B2B` | `https://api.giga.chat/v1` |
-| Corporate | `GIGACHAT_API_CORP` | `https://api.giga.chat/v1` |
+| Корпоративный | `GIGACHAT_API_CORP` | `https://api.giga.chat/v1` |
 
-The extension selects the chat API base URL automatically:
+Расширение автоматически выбирает базовый URL API чата:
 - `GIGACHAT_API_PERS` -> `https://gigachat.devices.sberbank.ru/api/v1`
 - `GIGACHAT_API_B2B` -> `https://api.giga.chat/v1`
 - `GIGACHAT_API_CORP` -> `https://api.giga.chat/v1`
 
-**Default:** `GIGACHAT_API_PERS`
+**По умолчанию:** `GIGACHAT_API_PERS`
 
-### Available models
+### Доступные модели
 
-| Model | Price | Capabilities |
+| Модель | Цена | Возможности |
 |---|---|---|
-| `GigaChat-2` | Standard | Good for simple tasks, fastest responses |
-| `GigaChat-2-Pro` | Moderate | Recommended — balanced speed and quality |
-| `GigaChat-2-Max` | Highest | Most capable, best for complex reasoning |
+| `GigaChat-2` | Стандартная | Подходит для простых задач, самые быстрые ответы |
+| `GigaChat-2-Pro` | Умеренная | Рекомендуется — оптимальное соотношение скорости и качества |
+| `GigaChat-2-Max` | Самая высокая | Наиболее продвинутая, лучшая для сложного анализа |
 
-We recommend `GigaChat-2-Pro` as the default: it offers the best balance between response quality and latency for generating commit messages, without the overhead of the Max variant.
+Рекомендуем использовать `GigaChat-2-Pro` по умолчанию: она обеспечивает наилучший баланс между качеством ответа и задержкой, без избыточности Max-версии.
 
 ```json
 {
-  "gigacommit.authorizationKey": "your-base64-encoded-key-here",
+  "gigacommit.authorizationKey": "ваш-base64-ключ-здесь",
   "gigacommit.scope": "GIGACHAT_API_PERS",
   "gigacommit.model": "GigaChat-2-Pro"
 }
 ```
 
-## Usage
+## Использование
 
-1. Make your code changes
-2. Stage the files you want to commit in the Git view
-3. Open the Source Control view
-4. Click the GigaCommit button in the Source Control header
-5. Wait for GigaChat to generate a commit message
-6. The generated message is inserted into the Source Control message field
-7. Review it and press the normal Commit button yourself
+1. Внесите изменения в код
+2. Добавьте нужные файлы в индекс (staging) через панель Git
+3. Откройте панель управления источниками
+4. Нажмите кнопку GigaCommit в заголовке панели управления
+5. Дождитесь генерации комментария GigaChat
+6. Сгенерированный текст вставляется в поле ввода комментария
+7. Проверьте его и сами нажмите кнопку Commit
 
-## How It Works
+## Как это работает
 
-1. The extension retrieves the **staged diff** (`git diff --cached`) via the VS Code Git extension API
-2. It obtains an OAuth access token from Sber's token endpoint
-3. It sends only the staged diff (unified diff format) to GigaChat API with instructions to generate a conventional commit message
-4. GigaChat analyzes the changes and returns an appropriate commit message
-5. The extension inserts the generated message into the Source Control input box
-6. You review it and decide yourself whether to press `Commit`
+1. Расширение получает **diff изменений в индексе** (`git diff --cached`) через API расширения Git в VS Code
+2. Оно получает токен доступа OAuth с конечной точки авторизации Sber
+3. Отправляет только diff изменений (в формате unified diff) в API GigaChat с инструкцией сгенерировать сообщение коммита
+4. GigaChat анализирует изменения и возвращает подходящее сообщение
+5. Расширение вставляет сообщение в поле ввода панели управления
+6. Вы проверяете его и сами решаете, нажимать ли кнопку `Commit`
 
-Binary files in the staged changes are automatically excluded — Git marks them as `Binary files a/... and b/... differ`, so no raw binary data is ever sent to the API. If the diff exceeds ~20 KB, you'll be warned and can choose to truncate.
+Бинарные файлы в индексе автоматически исключаются — Git помечает их как `Binary files a/... and b/... differ`, поэтому сырые бинарные данные никогда не отправляются в API. Если diff превышает ~20 КБ, вы получите предупреждение и сможете выбрать усечение.
 
-## Conventional Commits Format
+## Формат Conventional Commits
 
-GigaCommit ensures all generated messages follow the Conventional Commits specification:
+GigaCommit гарантирует, что все сообщения следуют спецификации Conventional Commits:
 
 ```
-<type>[optional scope]: <description>
+<type>[необязательная область]: <описание>
 
-[optional body]
+[необязательный текст]
 
-[optional footer(s)]
+[необязательные сноски]
 ```
 
-For small diffs, GigaCommit aims to generate only the first summary line.
+Для небольших изменений GigaCommit генерирует только первую строку.
 
-For larger diffs, it may add a short details section under the title, for example:
+Для крупных изменений может быть добавлен краткий раздел с деталями, например:
 
 ```text
-feat: add SCM commit message generation
+feat: добавить генерацию сообщений коммитов SCM
 
-- update Source Control workflow in README
-- add SCM action button integration
-- insert generated message into commit input
+- обновить workflow Source Control в README
+- добавить интеграцию кнопки действия SCM
+- вставить сгенерированное сообщение в поле ввода коммита
 ```
 
-Common types include:
-- `feat`: A new feature
-- `fix`: A bug fix
-- `docs`: Documentation only changes
-- `style`: Changes that do not affect the meaning of the code
-- `refactor`: A code change that neither fixes a bug nor adds a feature
-- `perf`: A code change that improves performance
-- `test`: Adding missing tests or correcting existing tests
-- `build`: Changes that affect the build system or external dependencies
-- `ci`: Changes to CI configuration files and scripts
-- `chore`: Other changes that don't modify src or test files
+Распространённые типы:
+- `feat`: Новая функция
+- `fix`: Исправление ошибки
+- `docs`: Изменения только в документации
+- `style`: Изменения, не влияющие на смысл кода
+- `refactor`: Изменение кода, не исправляющее ошибку и не добавляющее функцию
+- `perf`: Изменение кода, улучшающее производительность
+- `test`: Добавление недостающих тестов или исправление существующих
+- `build`: Изменения, влияющие на систему сборки или внешние зависимости
+- `ci`: Изменения в конфигурационных файлах и скриптах CI
+- `chore`: Другие изменения, не затрагивающие src или test
 
-## Security
+## Безопасность
 
-GigaCommit respects your code privacy:
+GigaCommit уважает конфиденциальность вашего кода:
 
-- Only the diff of your staged changes is sent to the API
-- Your full codebase remains on your machine
-- OAuth token is cached in VS Code globalState (encrypted) and reused until 30 s before hard expiry
-- If the server returns 401, the token is invalidated and refreshed automatically
-- All communication with GigaChat uses HTTPS
+- В API отправляется только diff изменений в индексе
+- Ваш полный код остаётся на вашем компьютере
+- Токен OAuth сохраняется в globalState VS Code (в зашифрованном виде) и используется повторно до 30 секунд до истечения срока действия
+- Если сервер возвращает 401, токен аннулируется и обновляется автоматически
+- Вся связь с GigaChat использует HTTPS
 
 ## OAuth Flow
 
-GigaCommit implements the official Sber GigaChat OAuth 2.0 flow:
+GigaCommit реализует официальный OAuth 2.0 flow от Sber GigaChat:
 
-1. **Token request** — sends `POST` to the auth endpoint with:
+1. **Запрос токена** — отправляет `POST` на конечную точку авторизации с:
    - `Authorization: Basic <authorizationKey>`
-   - `RqUID: <uuid4>` header
-   - `scope=<your_scope>` body
-2. **Chat completion** — uses the returned `access_token` as `Bearer` token
+   - Заголовок `RqUID: <uuid4>`
+   - Тело `scope=<your_scope>`
+2. **Завершение чата** — использует полученный `access_token` как токен `Bearer`
 
-Token is cached across VS Code sessions and refreshed automatically. If the API returns 401, token is invalidated and re-obtained, with a single retry.
+Токен кэшируется между сессиями VS Code и обновляется автоматически. Если API возвращает 401, токен аннулируется и повторно получается, с одной попыткой повтора.
 
-## Troubleshooting
+## Устранение неполадок
 
-**Q: I get an error about missing authorization key**
-A: Make sure you've configured your `gigacommit.authorizationKey` in VSCode settings
+**В: Я получаю ошибку об отсутствующем ключе авторизации**
+О: Убедитесь, что вы настроили `gigacommit.authorizationKey` в настройках VSCode
 
-**Q: HTTP 401 from token endpoint**
-A: Verify the authorization key is correctly Base64-encoded and active in the GigaChat developer portal
+**В: Я получаю HTTP 401 с конечной точки токена**
+О: Убедитесь, что ключ авторизации правильно закодирован в Base64 и активен в портале разработчиков GigaChat
 
-**Q: The AI takes too long to respond**
-A: Check your internet connection and GigaChat API status
+**В: ИИ слишком долго отвечает**
+О: Проверьте подключение к интернету и статус API GigaChat
 
-**Q: Generated messages are not relevant**
-A: Try staging fewer files at once for more focused commit messages
+**В: Сгенерированные сообщения не по теме**
+О: Попробуйте добавлять в индекс меньше файлов одновременно для более сфокусированных коммитов
 
-**Q: HTTP 403 Forbidden**
-A: Verify the `scope` setting matches your license type (CORP / PERS / B2B)
+**В: HTTP 403 Forbidden**
+О: Убедитесь, что настройка `scope` соответствует вашему типу лицензии (CORP / PERS / B2B)
 
-### API Error Details
+### Детали ошибок API
 
-When the GigaChat API returns an error, the extension now shows the server-provided description — not just the HTTP status code.
+Когда API GigaChat возвращает ошибку, расширение показывает описание от сервера — а не только код HTTP-статуса.
 
-| HTTP status | What it means | Common cause |
+| HTTP статус | Что означает | Распространённая причина |
 |---|---|---|
-| 400 | Bad request — invalid parameters | Bad request body or unsupported model |
-| 401 | Unauthorized — invalid/expired token | Token revoked or mismatched credentials |
-| 403 | Forbidden — no access | Wrong `scope` or insufficient permissions |
-| 404 | Not found | Wrong model name or endpoint mismatch for the selected scope |
-| 422 | Unprocessable entity — invalid format | Malformed messages array |
-| 429 | Rate limited | Too many requests — wait and retry |
-| 500 | Internal server error | GigaChat backend issue |
+| 400 | Некорректный запрос — неверные параметры | Неверное тело запроса или неподдерживаемая модель |
+| 401 | Неавторизованный доступ — недействительный/истёкший токен | Токен отозван или несовпадающие учётные данные |
+| 403 | Доступ запрещён — нет прав | Неверный `scope` или недостаточно прав |
+| 404 | Не найдено | Неверное имя модели или несоответствие конечной точки выбранному scope |
+| 422 | Необрабатываемая сущность — неверный формат | Некорректный массив сообщений |
+| 429 | Превышен лимит запросов | Слишком много запросов — подождите и повторите |
+| 500 | Внутренняя ошибка сервера | Проблема на стороне GigaChat |
 
-The full response body is logged to the VS Code Developer Console for debugging, with sensitive data automatically redacted.
+Полный ответ сервера записывается в консоль разработчика VS Code для отладки, чувствительные данные автоматически скрываются.
 
-### TLS / Certificate Issues
+### Проблемы с TLS / сертификатами
 
-Sber GigaChat API uses HTTPS with certificates issued by the Russian National CA (НУЦ Минцифры). If you see TLS handshake failures like `EPROTO`, `SSLV3_ALERT_HANDSHAKE_FAILURE`, or `CERT_UNTRUSTED`:
+API GigaChat использует HTTPS с сертификатами от Национального УЦ Минцифры. Если вы видите ошибки TLS handshake, такие как `EPROTO`, `SSLV3_ALERT_HANDSHAKE_FAILURE` или `CERT_UNTRUSTED`:
 
-1. **Install the root certificate** — on most platforms, the "Russian Trusted Root CA" (НУЦ Минцифры) should be installed. On macOS it typically comes pre-installed. On Linux, add it to `/usr/local/share/ca-certificates/` and run `update-ca-certificates`.
+1. **Установите корневой сертификат** — на большинстве платформ сертификат "Российский доверенный корневой CA" (НУЦ Минцифры) должен быть установлен. В macOS он обычно уже предустановлен. В Linux добавьте его в `/usr/local/share/ca-certificates/` и выполните `update-ca-certificates`.
 
-2. **Corporate proxy / MITM** — if your company uses a proxy that intercepts HTTPS traffic, you may need to trust your proxy's CA certificate. Set the `GigaCommit: CA Bundle Path` setting to point to a PEM file containing your proxy's root certificate.
+2. **Корпоративный прокси / MITM** — если ваша компания использует прокси, перехватывающий HTTPS-трафик, возможно, потребуется доверять корневому сертификату прокси. Установите настройку `GigaCommit: CA Bundle Path`, указав путь к PEM-файлу с корневым сертификатом прокси.
 
-3. **Custom CA bundle** — if your system's default certificate store doesn't include the required CAs, you can provide a custom CA bundle:
-   - Set `gigacommit.caBundlePath` to the full path of a `.pem` file
-   - This file should contain the certificate chain (root CA + intermediates)
-   - Example: `/path/to/nuts-minifry.pem`
+3. **Пользовательский пакет CA** — если в хранилище сертификатов вашей системы нет нужных CA, вы можете предоставить пользовательский пакет:
+   - Установите `gigacommit.caBundlePath` как полный путь к `.pem` файлу
+   - Этот файл должен содержать цепочку сертификатов (корневой CA + промежуточные)
+   - Пример: `/path/to/nuts-minifry.pem`
 
-   Do **not** disable TLS verification (`rejectUnauthorized: false`). The extension never disables TLS by default and strongly discourages it.
+   **Не отключайте** проверку TLS (`rejectUnauthorized: false`). Расширение никогда не отключает TLS по умолчанию и настоятельно этого не рекомендует.
 
-4. **Expired certificate** — if the server certificate has expired, check [GigaChat developer portal](https://developers.sber.ru) for any service notices.
+4. **Истёкший сертификат** — если сертификат сервера истёк, проверьте [портал разработчиков GigaChat](https://developers.sber.ru) на наличие уведомлений о сервисе.
 
-## Contributing
+## Участие
 
-Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
+Приветствуются любые вклады! Пожалуйста, не стесняйтесь создавать issues, предложения по функционалу или pull requests.
 
-## License
+## Лицензия
 
 MIT License
 
-## Acknowledgements
+## Благодарности
 
-Powered by GigaChat AI and built on VSCode Extension APIs.
+Создано на основе GigaChat AI и VSCode Extension APIs.
