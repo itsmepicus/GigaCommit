@@ -7,6 +7,7 @@
     "url": "https://github.com/itsmepicus/gigacommit.git"
   },
   "description": "VSCode extension for AI-powered commits using GigaChat and Conventional Commits",
+  "icon": "icon.png",
   "main": "out/extension.js",
   "activationEvents": [
     "onCommand:gigacommit.makeCommit"
