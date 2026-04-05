@@ -1,5 +1,7 @@
 {
   "name": "gigacommit",
+  "displayName": "GigaCommit - AI-Powered Git Commits",
+  "publisher": "itsmepicus",
   "version": "1.0.0",
 
   "repository": {
