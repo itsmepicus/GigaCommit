@@ -1,5 +1,7 @@
 # GigaCommit - AI-Powered Git Commits for VSCode
 
+[Русский](readme.md)
+
 GigaCommit is a Visual Studio Code extension that leverages artificial intelligence to generate meaningful, conventional-style commit messages based on your code changes. 
 
 ![GigaCommit demo](assets/demo.gif)
@@ -36,6 +38,7 @@ Before using GigaCommit, you'll need to configure GigaChat OAuth credentials:
 | `gigacommit.authorizationKey` | Base64-encoded authorization key (your API key for OAuth) | *required* |
 | `gigacommit.scope` | OAuth scope — dropdown: PERS / B2B / CORP. API base URL is selected automatically from this value | `GIGACHAT_API_PERS` |
 | `gigacommit.model` | GigaChat model — dropdown: GigaChat-2 / GigaChat-2-Pro / GigaChat-2-Max | `GigaChat-2-Pro` |
+| `gigacommit.commitLanguage` | Language for the generated commit message text | `English` |
 | `gigacommit.caBundlePath` | Path to a PEM file with custom CA certificates (optional) | *(empty)* |
 
 ### Getting the authorization key
@@ -76,9 +79,20 @@ We recommend `GigaChat-2-Pro` as the default: it offers the best balance between
 {
   "gigacommit.authorizationKey": "your-base64-encoded-key-here",
   "gigacommit.scope": "GIGACHAT_API_PERS",
-  "gigacommit.model": "GigaChat-2-Pro"
+  "gigacommit.model": "GigaChat-2-Pro",
+  "gigacommit.commitLanguage": "English"
 }
 ```
+
+### Commit language
+
+The `gigacommit.commitLanguage` setting controls the language of the commit text:
+- `English` — the summary and bullet points are generated in English
+- `Russian` — the summary and bullet points are generated in Russian, using impersonal or passive phrasing
+
+The Conventional Commit type stays standard:
+- `feat: add commit language setting`
+- `fix: исправлена обработка OAuth токена`
 
 ## Usage
 

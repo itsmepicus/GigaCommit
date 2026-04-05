@@ -1,5 +1,7 @@
 # GigaCommit - ИИ генерация коммитов
 
+[English](readme.en.md)
+
 GigaCommit — это расширение для Visual Studio Code, использующее GigaChat для генерации содержательных комментариев к коммитам в соответствии со стандартами convential commits.
 
 ![GigaCommit demo](assets/demo.gif)
@@ -36,6 +38,7 @@ GigaCommit — это расширение для Visual Studio Code, испол
 | `gigacommit.authorizationKey` | Base64-закодированный ключ авторизации (ваш API-ключ для OAuth) | *обязательный* |
 | `gigacommit.scope` | Охват OAuth — выбрать: PERS / B2B / CORP. Базовый URL API выбирается автоматически по значению | `GIGACHAT_API_PERS` |
 | `gigacommit.model` | Модель GigaChat — выбрать: GigaChat-2 / GigaChat-2-Pro / GigaChat-2-Max | `GigaChat-2-Pro` |
+| `gigacommit.commitLanguage` | Язык текста коммита — English / Russian. Тип Conventional Commit остаётся стандартным (`feat`, `fix`, `docs` и т.д.) | `English` |
 | `gigacommit.caBundlePath` | Путь к PEM-файлу с пользовательскими сертификатами CA (необязательно) | *(пусто)* |
 
 ### Получение ключа авторизации
@@ -75,9 +78,20 @@ GigaCommit — это расширение для Visual Studio Code, испол
 {
   "gigacommit.authorizationKey": "ваш-base64-ключ-здесь",
   "gigacommit.scope": "GIGACHAT_API_PERS",
-  "gigacommit.model": "GigaChat-2-Pro"
+  "gigacommit.model": "GigaChat-2-Pro",
+  "gigacommit.commitLanguage": "English"
 }
 ```
+
+### Язык коммита
+
+Настройка `gigacommit.commitLanguage` управляет языком текста коммита:
+- `English` — summary и bullet points будут сгенерированы на английском
+- `Russian` — summary и bullet points будут сгенерированы на русском в безличной или пассивной форме
+
+При этом тип Conventional Commit остаётся стандартным:
+- `feat: add commit language setting`
+- `fix: исправлена обработка OAuth токена`
 
 ## Использование
 

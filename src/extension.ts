@@ -371,11 +371,55 @@ async function invalidateToken(state: vscode.Memento) {
 
 const DETAIL_DIFF_THRESHOLD = 4_000;
 
-function buildCommitPrompt(diffText: string): string {
+type CommitLanguage = 'English' | 'Russian';
+
+function buildCommitPrompt(diffText: string, commitLanguage: CommitLanguage): string {
 	const isLargeDiff = diffText.length >= DETAIL_DIFF_THRESHOLD;
+	if (commitLanguage === 'Russian') {
+		const lines = [
+			'Сгенерируй сообщение коммита git по staged diff.',
+			'Пиши summary и bullet points на русском языке в безличной или пассивной форме.',
+			'Тип и scope Conventional Commit оставляй стандартными, на английском и в нижнем регистре (например: feat, fix, docs, refactor, chore).',
+			'',
+			'Строгие правила вывода:',
+			'1. Первая строка должна быть корректным Conventional Commit в нижнем регистре.',
+			'2. Формат первой строки должен быть строго таким: type(scope): краткое описание ИЛИ type: краткое описание.',
+			'3. Первая строка должна быть короткой и желательно не длиннее 72 символов.',
+			'4. Не оборачивай ответ в кавычки или markdown.',
+			'5. Не используй формулировки вроде "это изменение", "этот коммит" или "файл README.md", если это не требуется по смыслу.',
+			'6. Не пиши от первого лица и не используй формы вроде "добавил", "обновил", "исправил".',
+			'7. Используй краткие безличные или пассивные формулировки: добавлено, обновлены, исправлены, удалены, переработаны, улучшены.',
+			'8. Используй подходящие типы: feat, fix, docs, refactor, chore, test, ci, build, perf, style.',
+		];
+
+		if (isLargeDiff) {
+			lines.push(
+				'9. Так как diff большой, после первой строки добавь пустую строку и затем 2-6 коротких bullet points.',
+				'10. Каждый bullet point должен начинаться с "- " и кратко описывать важный изменённый файл или область.',
+				'11. Bullet points тоже пиши на русском в безличной или пассивной форме.'
+			);
+		} else {
+			lines.push(
+				'9. Для небольших diff возвращай только первую строку, без body и без bullet points.'
+			);
+		}
+
+		lines.push(
+			'',
+			'Примеры:',
+			'docs(readme): обновлён workflow Source Control',
+			'feat(scm): добавлена кнопка GigaCommit',
+			'',
+			'Staged diff:',
+			diffText
+		);
+
+		return lines.join('\n');
+	}
 
 	const lines = [
 		'Generate a git commit message from the staged diff.',
+		'Write the commit summary and bullet points in English. Keep the Conventional Commit type/scope in standard lowercase English.',
 		'',
 		'Strict output rules:',
 		'1. The first line must be a valid Conventional Commit in lowercase.',
@@ -412,7 +456,7 @@ function buildCommitPrompt(diffText: string): string {
 	return lines.join('\n');
 }
 
-function buildChatPayload(model: string, diffText: string): object {
+function buildChatPayload(model: string, diffText: string, commitLanguage: CommitLanguage): object {
 	return {
 		model,
 		messages: [
@@ -422,7 +466,7 @@ function buildChatPayload(model: string, diffText: string): object {
 			},
 			{
 				role: 'user',
-				content: buildCommitPrompt(diffText)
+				content: buildCommitPrompt(diffText, commitLanguage)
 			}
 		]
 	};
@@ -480,6 +524,7 @@ async function makeAiCommit(state: vscode.Memento) {
 	const authorizationKey = config.get<string>('authorizationKey');
 	const scope = config.get<string>('scope') || 'GIGACHAT_API_PERS';
 	const model = config.get<string>('model') || 'GigaChat-2-Pro';
+	const commitLanguage = (config.get<string>('commitLanguage') || 'English') as CommitLanguage;
 	const caBundlePath = config.get<string>('caBundlePath');
 
 	const ca = loadCaBundle(caBundlePath);
@@ -564,7 +609,7 @@ async function makeAiCommit(state: vscode.Memento) {
 	// --- Send chat completion ---
 	vscode.window.showInformationMessage('Generating AI commit message...');
 
-	const payload = buildChatPayload(model, diffText);
+	const payload = buildChatPayload(model, diffText, commitLanguage);
 	let response: HttpResult;
 	try {
 		response = await sendChatCompletion(apiBaseUrl, accessToken, payload, ca);

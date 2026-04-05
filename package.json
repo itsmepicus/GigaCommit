@@ -1,8 +1,8 @@
 {
   "name": "gigacommit",
-  "displayName": "GigaCommit - AI-Powered Git Commits",
+  "displayName": "GigaCommit - ИИ генерация коммитов",
   "publisher": "itsmepicus",
-  "version": "1.0.1",
+  "version": "1.0.2",
 
   "repository": {
     "type": "git",
@@ -108,8 +108,15 @@
           "default": "GigaChat-2-Pro",
           "description": "GigaChat model to use. GigaChat-2 (standard), GigaChat-2-Pro (recommended), GigaChat-2-Max (most capable)"
         },
-        "gigacommit.caBundlePath": {
+        "gigacommit.commitLanguage": {
           "order": 4,
+          "type": "string",
+          "enum": ["English", "Russian"],
+          "default": "English",
+          "description": "Language for the generated commit message text. Conventional Commit types stay standard (feat, fix, docs, etc.)"
+        },
+        "gigacommit.caBundlePath": {
+          "order": 5,
           "type": "string",
           "default": "",
           "description": "Path to a PEM file containing trusted CA certificates (needed if your system doesn't trust the Sber/NUTS certificate chain)"
