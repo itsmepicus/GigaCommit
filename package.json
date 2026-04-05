@@ -8,6 +8,10 @@
     "type": "git",
     "url": "https://github.com/itsmepicus/gigacommit.git"
   },
+  "homepage": "https://github.com/itsmepicus/gigacommit",
+  "bugs": {
+    "url": "https://github.com/itsmepicus/gigacommit/issues"
+  },
   "description": "VSCode extension for AI-powered commits using GigaChat and Conventional Commits",
   "icon": "icon.png",
   "main": "out/extension.js",
