@@ -54,9 +54,36 @@
     "commands": [
       {
         "command": "gigacommit.makeCommit",
-        "title": "Make AI Commit with GigaChat"
+        "title": "Make AI Commit with GigaChat",
+        "icon": {
+          "light": "media/light/gigacommit.svg",
+          "dark": "media/dark/gigacommit.svg"
+        }
       }
     ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "gigacommit.makeCommit",
+          "when": "scmProvider == git",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "gigacommit.makeCommit",
+          "when": "view == scm",
+          "group": "navigation"
+        }
+      ],
+      "scm/inputBox": [
+        {
+          "command": "gigacommit.makeCommit",
+          "when": "scmProvider == git",
+          "group": "inline"
+        }
+      ]
+    },
     "configuration": {
       "type": "object",
       "title": "GigaCommit Settings",

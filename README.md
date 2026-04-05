@@ -81,10 +81,11 @@ We recommend `GigaChat-2-Pro` as the default: it offers the best balance between
 
 1. Make your code changes
 2. Stage the files you want to commit in the Git view
-3. Open Command Palette (Ctrl+Shift+P)
-4. Run "Make AI Commit with GigaChat"
+3. Open the Source Control view
+4. Click the GigaCommit button in the Source Control header
 5. Wait for GigaChat to generate a commit message
-6. Confirm the suggested message or cancel
+6. The generated message is inserted into the Source Control message field
+7. Review it and press the normal Commit button yourself
 
 ## How It Works
 
@@ -92,7 +93,8 @@ We recommend `GigaChat-2-Pro` as the default: it offers the best balance between
 2. It obtains an OAuth access token from Sber's token endpoint
 3. It sends only the staged diff (unified diff format) to GigaChat API with instructions to generate a conventional commit message
 4. GigaChat analyzes the changes and returns an appropriate commit message
-5. You review and confirm the message before the extension runs `git commit`
+5. The extension inserts the generated message into the Source Control input box
+6. You review it and decide yourself whether to press `Commit`
 
 Binary files in the staged changes are automatically excluded — Git marks them as `Binary files a/... and b/... differ`, so no raw binary data is ever sent to the API. If the diff exceeds ~20 KB, you'll be warned and can choose to truncate.
 
@@ -106,6 +108,18 @@ GigaCommit ensures all generated messages follow the Conventional Commits specif
 [optional body]
 
 [optional footer(s)]
+```
+
+For small diffs, GigaCommit aims to generate only the first summary line.
+
+For larger diffs, it may add a short details section under the title, for example:
+
+```text
+feat: add SCM commit message generation
+
+- update Source Control workflow in README
+- add SCM action button integration
+- insert generated message into commit input
 ```
 
 Common types include:

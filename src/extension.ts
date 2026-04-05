@@ -369,17 +369,60 @@ async function invalidateToken(state: vscode.Memento) {
 
 // --- Chat completions -----------------------------------------------------
 
+const DETAIL_DIFF_THRESHOLD = 4_000;
+
+function buildCommitPrompt(diffText: string): string {
+	const isLargeDiff = diffText.length >= DETAIL_DIFF_THRESHOLD;
+
+	const lines = [
+		'Generate a git commit message from the staged diff.',
+		'',
+		'Strict output rules:',
+		'1. The first line must be a valid Conventional Commit in lowercase.',
+		'2. Format the first line exactly as: type(scope): short summary OR type: short summary.',
+		'3. The first line must be concise and ideally under 72 characters.',
+		'4. Do not wrap the first line in quotes or markdown.',
+		'5. Do not mention "this change", "this commit", or "README.md file" unless necessary.',
+		'6. Prefer specific verbs like add, update, fix, remove, refactor, improve.',
+		'7. Use these types when appropriate: feat, fix, docs, refactor, chore, test, ci, build, perf, style.',
+	];
+
+	if (isLargeDiff) {
+		lines.push(
+			'8. Because the diff is large, add a blank line after the first line and then 2-6 short bullet points.',
+			'9. Each bullet must start with "- " and briefly describe an important changed file or area.',
+			'10. Keep bullets compact, for example: "- update README usage flow" or "- add SCM button icons".'
+		);
+	} else {
+		lines.push(
+			'8. For small diffs, return only the first line with no body and no bullet points.'
+		);
+	}
+
+	lines.push(
+		'',
+		'Examples:',
+		'docs(readme): update Source Control workflow',
+		'feat(scm): add GigaCommit action button',
+		'',
+		'Staged diff:',
+		diffText
+	);
+
+	return lines.join('\n');
+}
+
 function buildChatPayload(model: string, diffText: string): object {
 	return {
 		model,
 		messages: [
 			{
 				role: 'system',
-				content: 'You are a helpful assistant that generates git commit messages in Conventional Commits format. Your responses should be ONLY the commit message, nothing else.'
+				content: 'You write precise git commit messages. Follow the requested output format exactly and return only the commit message text.'
 			},
 			{
 				role: 'user',
-				content: `Generate a conventional commit message based on these changes:\n\n${diffText}`
+				content: buildCommitPrompt(diffText)
 			}
 		]
 	};
@@ -551,15 +594,8 @@ async function makeAiCommit(state: vscode.Memento) {
 		}
 
 		const commitMessage = data.choices[0].message.content.trim();
-
-		const confirmation = await vscode.window.showQuickPick(['Yes', 'No'], {
-			placeHolder: `Commit with message: ${commitMessage}`
-		});
-
-		if (confirmation === 'Yes') {
-			await repo.commit(commitMessage);
-			vscode.window.showInformationMessage(`Committed: ${commitMessage}`);
-		}
+		repo.inputBox.value = commitMessage;
+		vscode.window.showInformationMessage('Commit message inserted into Source Control input.');
 	} catch (error) {
 		vscode.window.showErrorMessage(`Failed to process response: ${(error as Error).message}`);
 		console.error(error);
