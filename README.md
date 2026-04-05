@@ -1,6 +1,6 @@
 # GigaCommit - AI-Powered Git Commits for VSCode
 
-GigaCommit is a Visual Studio Code extension that leverages artificial intelligence to generate meaningful, conventional-style commit messages based on your code changes. By integrating with GigaChat, it analyzes your staged changes and suggests appropriate commit messages following the Conventional Commits specification.
+GigaCommit is a Visual Studio Code extension that leverages artificial intelligence to generate meaningful, conventional-style commit messages based on your code changes. By integrating with GigaChat via the official Sber OAuth scheme, it analyzes your staged changes and suggests appropriate commit messages following the Conventional Commits specification.
 
 ## Features
 
@@ -12,7 +12,7 @@ GigaCommit is a Visual Studio Code extension that leverages artificial intellige
 
 🔐 **Secure** - Your code stays private; only diff information is sent to GigaChat API
 
-⚙️ **Configurable** - Easy to configure API keys and endpoints
+⚙️ **Configurable** - Easy to configure OAuth credentials and endpoints
 
 ## Installation
 
@@ -23,17 +23,57 @@ GigaCommit is a Visual Studio Code extension that leverages artificial intellige
 
 ## Configuration
 
-Before using GigaCommit, you'll need to configure your GigaChat API credentials:
+Before using GigaCommit, you'll need to configure GigaChat OAuth credentials:
 
 1. Open VSCode Settings (Ctrl+,)
 2. Search for "GigaCommit"
-3. Enter your GigaChat API key in the `GigaCommit: Api Key` field
-4. Optionally change the API URL if needed
+3. Configure the following settings:
+
+| Setting | Description | Default |
+|---|---|---|
+| `gigacommit.authorizationKey` | Base64-encoded authorization key (your API key for OAuth) | *required* |
+| `gigacommit.authUrl` | OAuth token endpoint | `https://ngw.devices.sberbank.ru:9443/api/v2/oauth` |
+| `gigacommit.apiBaseUrl` | API base URL (chat endpoint = `apiBaseUrl/chat/completions`) | `https://api.giga.chat/v1` |
+| `gigacommit.scope` | OAuth scope — dropdown: PERS / B2B / CORP | `GIGACHAT_API_PERS` |
+| `gigacommit.model` | GigaChat model — dropdown: GigaChat-2 / GigaChat-2-Pro / GigaChat-2-Max | `GigaChat-2-Pro` |
+| `gigacommit.caBundlePath` | Path to a PEM file with custom CA certificates (optional) | *(empty)* |
+
+### Getting the authorization key
+
+1. Register your application in the [GigaChat developers portal](https://developers.sber.ru).
+2. Go to **Settings** → **API Keys**.
+3. Copy your **Authorization Key**.
+4. Base64-encode it: `echo -n "key:value" | base64` (or use any online encoder).
+
+The `authorizationKey` should look like `NjE5MDhkYWUt...` (a Base64 string).
+
+### Which scope and API base URL to use
+
+| License type | `scope` | `apiBaseUrl` |
+|---|---|---|
+| Personal | `GIGACHAT_API_PERS` | `https://gigachat.devices.sberbank.ru/api/v1` |
+| B2B | `GIGACHAT_API_B2B` | `https://api.giga.chat/v1` |
+| Corporate | `GIGACHAT_API_CORP` | `https://api.giga.chat/v1` |
+
+**Default:** `GIGACHAT_API_PERS` + `https://api.giga.chat/v1` — personal scope with the public cloud API.
+
+### Available models
+
+| Model | Price | Capabilities |
+|---|---|---|
+| `GigaChat-2` | Standard | Good for simple tasks, fastest responses |
+| `GigaChat-2-Pro` | Moderate | Recommended — balanced speed and quality |
+| `GigaChat-2-Max` | Highest | Most capable, best for complex reasoning |
+
+We recommend `GigaChat-2-Pro` as the default: it offers the best balance between response quality and latency for generating commit messages, without the overhead of the Max variant.
 
 ```json
 {
-  "gigacommit.apiKey": "your-api-key-here",
-  "gigacommit.apiUrl": "https://api.gigachat.ru/v1/chat/completions"
+  "gigacommit.authorizationKey": "your-base64-encoded-key-here",
+  "gigacommit.scope": "GIGACHAT_API_PERS",
+  "gigacommit.authUrl": "https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
+  "gigacommit.apiBaseUrl": "https://api.giga.chat/v1",
+  "gigacommit.model": "GigaChat-2-Pro"
 }
 ```
 
@@ -48,10 +88,13 @@ Before using GigaCommit, you'll need to configure your GigaChat API credentials:
 
 ## How It Works
 
-1. The extension collects information about your staged changes
-2. It sends this information to GigaChat API with instructions to generate a conventional commit message
-3. GigaChat analyzes the changes and returns an appropriate commit message
-4. You review and confirm the message before committing
+1. The extension retrieves the **staged diff** (`git diff --cached`) via the VS Code Git extension API
+2. It obtains an OAuth access token from Sber's token endpoint
+3. It sends only the staged diff (unified diff format) to GigaChat API with instructions to generate a conventional commit message
+4. GigaChat analyzes the changes and returns an appropriate commit message
+5. You review and confirm the message before the extension runs `git commit`
+
+Binary files in the staged changes are automatically excluded — Git marks them as `Binary files a/... and b/... differ`, so no raw binary data is ever sent to the API. If the diff exceeds ~20 KB, you'll be warned and can choose to truncate.
 
 ## Conventional Commits Format
 
@@ -83,19 +126,71 @@ GigaCommit respects your code privacy:
 
 - Only the diff of your staged changes is sent to the API
 - Your full codebase remains on your machine
-- API keys are stored in VSCode's settings
+- OAuth token is cached in VS Code globalState (encrypted) and reused until 30 s before hard expiry
+- If the server returns 401, the token is invalidated and refreshed automatically
 - All communication with GigaChat uses HTTPS
+
+## OAuth Flow
+
+GigaCommit implements the official Sber GigaChat OAuth 2.0 flow:
+
+1. **Token request** — sends `POST` to the auth endpoint with:
+   - `Authorization: Basic <authorizationKey>`
+   - `RqUID: <uuid4>` header
+   - `scope=<your_scope>` body
+2. **Chat completion** — uses the returned `access_token` as `Bearer` token
+
+Token is cached across VS Code sessions and refreshed automatically. If the API returns 401, token is invalidated and re-obtained, with a single retry.
 
 ## Troubleshooting
 
-**Q: I get an error about missing API key**
-A: Make sure you've configured your GigaChat API key in VSCode settings
+**Q: I get an error about missing authorization key**
+A: Make sure you've configured your `gigacommit.authorizationKey` in VSCode settings
+
+**Q: HTTP 401 from token endpoint**
+A: Verify the authorization key is correctly Base64-encoded and active in the GigaChat developer portal
 
 **Q: The AI takes too long to respond**
 A: Check your internet connection and GigaChat API status
 
 **Q: Generated messages are not relevant**
 A: Try staging fewer files at once for more focused commit messages
+
+**Q: HTTP 403 Forbidden**
+A: Verify the `scope` setting matches your license type (CORP / PERS / B2B)
+
+### API Error Details
+
+When the GigaChat API returns an error, the extension now shows the server-provided description — not just the HTTP status code.
+
+| HTTP status | What it means | Common cause |
+|---|---|---|
+| 400 | Bad request — invalid parameters | Bad request body or unsupported model |
+| 401 | Unauthorized — invalid/expired token | Token revoked or mismatched credentials |
+| 403 | Forbidden — no access | Wrong `scope` or insufficient permissions |
+| 404 | Not found | Wrong `apiBaseUrl` or model name |
+| 422 | Unprocessable entity — invalid format | Malformed messages array |
+| 429 | Rate limited | Too many requests — wait and retry |
+| 500 | Internal server error | GigaChat backend issue |
+
+The full response body is logged to the VS Code Developer Console for debugging, with sensitive data automatically redacted.
+
+### TLS / Certificate Issues
+
+Sber GigaChat API uses HTTPS with certificates issued by the Russian National CA (НУЦ Минцифры). If you see TLS handshake failures like `EPROTO`, `SSLV3_ALERT_HANDSHAKE_FAILURE`, or `CERT_UNTRUSTED`:
+
+1. **Install the root certificate** — on most platforms, the "Russian Trusted Root CA" (НУЦ Минцифры) should be installed. On macOS it typically comes pre-installed. On Linux, add it to `/usr/local/share/ca-certificates/` and run `update-ca-certificates`.
+
+2. **Corporate proxy / MITM** — if your company uses a proxy that intercepts HTTPS traffic, you may need to trust your proxy's CA certificate. Set the `GigaCommit: CA Bundle Path` setting to point to a PEM file containing your proxy's root certificate.
+
+3. **Custom CA bundle** — if your system's default certificate store doesn't include the required CAs, you can provide a custom CA bundle:
+   - Set `gigacommit.caBundlePath` to the full path of a `.pem` file
+   - This file should contain the certificate chain (root CA + intermediates)
+   - Example: `/path/to/nuts-minifry.pem`
+
+   Do **not** disable TLS verification (`rejectUnauthorized: false`). The extension never disables TLS by default and strongly discourages it.
+
+4. **Expired certificate** — if the server certificate has expired, check [GigaChat developer portal](https://developers.sber.ru) for any service notices.
 
 ## Contributing
 

@@ -1,16 +1,16 @@
 {
   "name": "gigacommit",
   "version": "1.0.0",
+
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/gigacommit.git"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yourusername/gigacommit.git"
+    "url": "https://github.com/itsmepicus/gigacommit.git"
   },
   "description": "VSCode extension for AI-powered commits using GigaChat and Conventional Commits",
   "main": "out/extension.js",
+  "activationEvents": [
+    "onCommand:gigacommit.makeCommit"
+  ],
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -p ./ --watch",
@@ -29,16 +29,15 @@
     "conventional-commits"
   ],
   "author": {
-    "name": "",
-    "email": ""
+    "name": "Igor Zarubin",
+    "email": "Zarubin.kol2019@gmail.com"
   },
   "license": "MIT",
   "engines": {
     "vscode": "^1.80.0"
   },
   "dependencies": {
-    "@types/vscode": "^1.80.0",
-    "node-fetch": "^3.3.2"
+    "@types/vscode": "^1.80.0"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.6",
@@ -62,15 +61,37 @@
       "type": "object",
       "title": "GigaCommit Settings",
       "properties": {
-        "gigacommit.apiKey": {
+        "gigacommit.authorizationKey": {
           "type": "string",
           "default": "",
-          "description": "Your GigaChat API key"
+          "description": "OAuth credential: paste your ClientID:ClientSecret string directly, or a Base64-encoded key"
         },
-        "gigacommit.apiUrl": {
+        "gigacommit.authUrl": {
           "type": "string",
-          "default": "https://api.gigachat.ru/v1/chat/completions",
-          "description": "GigaChat API endpoint"
+          "default": "https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
+          "description": "OAuth token endpoint"
+        },
+        "gigacommit.apiBaseUrl": {
+          "type": "string",
+          "default": "https://api.giga.chat/v1",
+          "description": "API base URL. Use https://gigachat.devices.sberbank.ru/api/v1 for personal license or https://api.giga.chat/v1 for B2B/B2C corporate"
+        },
+        "gigacommit.scope": {
+          "type": "string",
+          "enum": ["GIGACHAT_API_PERS", "GIGACHAT_API_B2B", "GIGACHAT_API_CORP"],
+          "default": "GIGACHAT_API_PERS",
+          "description": "OAuth scope: GIGACHAT_API_PERS (personal), GIGACHAT_API_B2B (B2B license), or GIGACHAT_API_CORP (corporate)"
+        },
+        "gigacommit.model": {
+          "type": "string",
+          "enum": ["GigaChat-2", "GigaChat-2-Pro", "GigaChat-2-Max"],
+          "default": "GigaChat-2-Pro",
+          "description": "GigaChat model to use. GigaChat-2 (standard), GigaChat-2-Pro (recommended), GigaChat-2-Max (most capable)"
+        },
+        "gigacommit.caBundlePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a PEM file containing trusted CA certificates (needed if your system doesn't trust the Sber/NUTS certificate chain)"
         }
       }
     }

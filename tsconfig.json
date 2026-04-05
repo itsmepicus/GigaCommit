@@ -6,7 +6,7 @@
 		],
 		"allowSyntheticDefaultImports": true,
 		"strict": true,
-		"module": "commonjs",
+		"module": "CommonJS",
 		"moduleResolution": "node",
 		"outDir": "out",
 		"rootDir": "src",
