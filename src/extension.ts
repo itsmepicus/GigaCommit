@@ -448,6 +448,25 @@ async function sendChatCompletion(
 // --- Helpers --------------------------------------------------------------
 
 const MAX_DIFF_SIZE = 20_000; // bytes sent to the model
+const VALID_SCOPES = ['GIGACHAT_API_PERS', 'GIGACHAT_API_B2B', 'GIGACHAT_API_CORP'] as const;
+type GigaChatScope = typeof VALID_SCOPES[number];
+const GIGACHAT_AUTH_URL = 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth';
+
+function isValidScope(scope: string): scope is GigaChatScope {
+	return (VALID_SCOPES as readonly string[]).includes(scope);
+}
+
+function getApiBaseUrlForScope(scope: GigaChatScope): string {
+	switch (scope) {
+		case 'GIGACHAT_API_PERS':
+			return 'https://gigachat.devices.sberbank.ru/api/v1';
+		case 'GIGACHAT_API_B2B':
+		case 'GIGACHAT_API_CORP':
+			return 'https://api.giga.chat/v1';
+		default:
+			throw new Error(`Invalid scope "${scope}". Must be one of: ${VALID_SCOPES.join(', ')}`);
+	}
+}
 
 function formatBytes(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -458,20 +477,17 @@ function formatBytes(bytes: number): string {
 
 async function makeAiCommit(state: vscode.Memento) {
 	const config = vscode.workspace.getConfiguration('gigacommit');
-	const authUrl = config.get<string>('authUrl') || 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth';
-	const apiBaseUrl = config.get<string>('apiBaseUrl') || 'https://api.giga.chat/v1';
 	const authorizationKey = config.get<string>('authorizationKey');
 	const scope = config.get<string>('scope') || 'GIGACHAT_API_PERS';
 	const model = config.get<string>('model') || 'GigaChat-2-Pro';
 	const caBundlePath = config.get<string>('caBundlePath');
 
 	const ca = loadCaBundle(caBundlePath);
-
-	const VALID_SCOPES = ['GIGACHAT_API_PERS', 'GIGACHAT_API_B2B', 'GIGACHAT_API_CORP'];
-	if (!VALID_SCOPES.includes(scope)) {
+	if (!isValidScope(scope)) {
 		vscode.window.showErrorMessage(`Invalid scope "${scope}". Must be one of: ${VALID_SCOPES.join(', ')}`);
 		return;
 	}
+	const apiBaseUrl = getApiBaseUrlForScope(scope);
 
 	if (!model.trim()) {
 		vscode.window.showErrorMessage('Model name cannot be empty. Please configure a valid model in settings.');
@@ -533,7 +549,7 @@ async function makeAiCommit(state: vscode.Memento) {
 
 	let accessToken: string;
 	try {
-		accessToken = await getValidAccessToken(state, authUrl, authorizationKey, scope, ca);
+		accessToken = await getValidAccessToken(state, GIGACHAT_AUTH_URL, authorizationKey, scope, ca);
 	} catch (error) {
 		const tlsInfo = diagnoseNetworkError(error as Error);
 		if (tlsInfo) {
@@ -566,7 +582,7 @@ async function makeAiCommit(state: vscode.Memento) {
 	// --- Retry once on 401 (token may have been revoked server-side) ---
 	if (response.status === 401) {
 		await invalidateToken(state);
-		accessToken = await getValidAccessToken(state, authUrl, authorizationKey, scope, ca);
+		accessToken = await getValidAccessToken(state, GIGACHAT_AUTH_URL, authorizationKey, scope, ca);
 		response = await sendChatCompletion(apiBaseUrl, accessToken, payload, ca);
 	}
 

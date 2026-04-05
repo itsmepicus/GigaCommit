@@ -13,10 +13,4 @@ yarn-debug.log*
 coverage
 .nyc_output
 .claude
-icon-original-wide.png
-icon-before-tight-crop.png
-icon-tight.png
-icon-backup-before-compress.png
-icon-backup-before-second-compress.png
-icon-source-tighten.png
-icon-tightened.png
+assets/demo.gif

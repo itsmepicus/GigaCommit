@@ -2,6 +2,8 @@
 
 GigaCommit is a Visual Studio Code extension that leverages artificial intelligence to generate meaningful, conventional-style commit messages based on your code changes. By integrating with GigaChat via the official Sber OAuth scheme, it analyzes your staged changes and suggests appropriate commit messages following the Conventional Commits specification.
 
+![GigaCommit demo](assets/demo.gif)
+
 ## Features
 
 ✨ **AI-Powered Commit Messages** - Let GigaChat analyze your code changes and generate descriptive commit messages
@@ -32,9 +34,7 @@ Before using GigaCommit, you'll need to configure GigaChat OAuth credentials:
 | Setting | Description | Default |
 |---|---|---|
 | `gigacommit.authorizationKey` | Base64-encoded authorization key (your API key for OAuth) | *required* |
-| `gigacommit.authUrl` | OAuth token endpoint | `https://ngw.devices.sberbank.ru:9443/api/v2/oauth` |
-| `gigacommit.apiBaseUrl` | API base URL (chat endpoint = `apiBaseUrl/chat/completions`) | `https://api.giga.chat/v1` |
-| `gigacommit.scope` | OAuth scope — dropdown: PERS / B2B / CORP | `GIGACHAT_API_PERS` |
+| `gigacommit.scope` | OAuth scope — dropdown: PERS / B2B / CORP. API base URL is selected automatically from this value | `GIGACHAT_API_PERS` |
 | `gigacommit.model` | GigaChat model — dropdown: GigaChat-2 / GigaChat-2-Pro / GigaChat-2-Max | `GigaChat-2-Pro` |
 | `gigacommit.caBundlePath` | Path to a PEM file with custom CA certificates (optional) | *(empty)* |
 
@@ -47,15 +47,20 @@ Before using GigaCommit, you'll need to configure GigaChat OAuth credentials:
 
 The `authorizationKey` should look like `NjE5MDhkYWUt...` (a Base64 string).
 
-### Which scope and API base URL to use
+### Which scope to use
 
-| License type | `scope` | `apiBaseUrl` |
+| License type | `scope` | Selected automatically |
 |---|---|---|
 | Personal | `GIGACHAT_API_PERS` | `https://gigachat.devices.sberbank.ru/api/v1` |
 | B2B | `GIGACHAT_API_B2B` | `https://api.giga.chat/v1` |
 | Corporate | `GIGACHAT_API_CORP` | `https://api.giga.chat/v1` |
 
-**Default:** `GIGACHAT_API_PERS` + `https://api.giga.chat/v1` — personal scope with the public cloud API.
+The extension selects the chat API base URL automatically:
+- `GIGACHAT_API_PERS` -> `https://gigachat.devices.sberbank.ru/api/v1`
+- `GIGACHAT_API_B2B` -> `https://api.giga.chat/v1`
+- `GIGACHAT_API_CORP` -> `https://api.giga.chat/v1`
+
+**Default:** `GIGACHAT_API_PERS`
 
 ### Available models
 
@@ -71,8 +76,6 @@ We recommend `GigaChat-2-Pro` as the default: it offers the best balance between
 {
   "gigacommit.authorizationKey": "your-base64-encoded-key-here",
   "gigacommit.scope": "GIGACHAT_API_PERS",
-  "gigacommit.authUrl": "https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
-  "gigacommit.apiBaseUrl": "https://api.giga.chat/v1",
   "gigacommit.model": "GigaChat-2-Pro"
 }
 ```
@@ -182,7 +185,7 @@ When the GigaChat API returns an error, the extension now shows the server-provi
 | 400 | Bad request — invalid parameters | Bad request body or unsupported model |
 | 401 | Unauthorized — invalid/expired token | Token revoked or mismatched credentials |
 | 403 | Forbidden — no access | Wrong `scope` or insufficient permissions |
-| 404 | Not found | Wrong `apiBaseUrl` or model name |
+| 404 | Not found | Wrong model name or endpoint mismatch for the selected scope |
 | 422 | Unprocessable entity — invalid format | Malformed messages array |
 | 429 | Rate limited | Too many requests — wait and retry |
 | 500 | Internal server error | GigaChat backend issue |
