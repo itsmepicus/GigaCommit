@@ -1,0 +1,70 @@
+{
+  "name": "gigacommit",
+  "version": "1.0.0",
+  "description": "VSCode extension for AI-powered commits using GigaChat and Conventional Commits",
+  "main": "out/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -p ./ --watch",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext .ts",
+    "test": "node ./out/test/runTest.js",
+    "prepublishOnly": "npm run compile",
+    "vscode:prepublish": "npm run compile"
+  },
+  "keywords": [
+    "vscode",
+    "extension",
+    "ai",
+    "commit",
+    "gigachat",
+    "conventional-commits"
+  ],
+  "author": {
+    "name": "",
+    "email": ""
+  },
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "dependencies": {
+    "@types/vscode": "^1.80.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^16.18.74",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vscode/test-electron": "^2.3.8",
+    "eslint": "^8.45.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.2.0",
+    "typescript": "^5.9.3"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "gigacommit.makeCommit",
+        "title": "Make AI Commit with GigaChat"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "GigaCommit Settings",
+      "properties": {
+        "gigacommit.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your GigaChat API key"
+        },
+        "gigacommit.apiUrl": {
+          "type": "string",
+          "default": "https://api.gigachat.ru/v1/chat/completions",
+          "description": "GigaChat API endpoint"
+        }
+      }
+    }
+  }
+}

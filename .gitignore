@@ -1,0 +1,9 @@
+node_modules/
+dist/
+out/
+*.log
+.env
+*.key
+.vscode/
+*.tsbuildinfo
+.DS_Store
