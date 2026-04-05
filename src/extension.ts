@@ -80,7 +80,7 @@ async function makeAiCommit() {
 		}
 
 		const data = await response.json();
-		const commitMessage = data.choices[0].message.content.trim();
+		const commitMessage = (data as any).choices[0].message.content.trim();
 
 		// Confirm and commit
 		const confirmation = await vscode.window.showQuickPick(['Yes', 'No'], {

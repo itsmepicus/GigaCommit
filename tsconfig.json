@@ -20,7 +20,6 @@
 		"exactOptionalPropertyTypes": true,
 		"noImplicitReturns": true,
 		"noPropertyAccessFromIndexSignature": true,
-		"importsNotUsedAsValues": "error",
 		"isolatedModules": true,
 		"useUnknownInCatchVariables": false,
 		"typeRoots": [
@@ -30,7 +29,8 @@
 			"node"
 		],
 		"forceConsistentCasingInFileNames": true,
-		"strictNullChecks": true
+		"strictNullChecks": true,
+		"skipLibCheck": true
 	},
 	"include": [
 		"src"

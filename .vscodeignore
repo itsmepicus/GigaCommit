@@ -1,0 +1,15 @@
+node_modules
+*.ts
+*.tsx
+*.map
+*.js.map
+out
+.vscode
+package-lock.json
+npm-debug.log*
+yarn-error.log*
+yarn-debug.log*
+*.log
+.DS_Store
+coverage
+.nyc_output

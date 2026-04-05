@@ -1,6 +1,14 @@
 {
   "name": "gigacommit",
   "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/gigacommit.git"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/gigacommit.git"
+  },
   "description": "VSCode extension for AI-powered commits using GigaChat and Conventional Commits",
   "main": "out/extension.js",
   "scripts": {
