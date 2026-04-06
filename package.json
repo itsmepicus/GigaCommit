@@ -75,13 +75,6 @@
           "when": "scmProvider == git",
           "group": "navigation"
         }
-      ],
-      "view/title": [
-        {
-          "command": "gigacommit.makeCommit",
-          "when": "view == scm",
-          "group": "navigation"
-        }
       ]
     },
     "configuration": {
