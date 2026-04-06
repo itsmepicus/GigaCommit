@@ -37,7 +37,7 @@ GigaCommit — это расширение для Visual Studio Code, испол
 |---|---|---|
 | `gigacommit.authorizationKey` | Base64-закодированный ключ авторизации (ваш API-ключ для OAuth) | *обязательный* |
 | `gigacommit.scope` | Охват OAuth — выбрать: PERS / B2B / CORP. Базовый URL API выбирается автоматически по значению | `GIGACHAT_API_PERS` |
-| `gigacommit.model` | Модель GigaChat — выбрать: GigaChat-2 / GigaChat-2-Pro / GigaChat-2-Max | `GigaChat-2-Pro` |
+| `gigacommit.model` | Модель GigaChat — выбрать: GigaChat-2 / GigaChat-2-Pro / GigaChat-2-Max | `GigaChat-2` |
 | `gigacommit.commitLanguage` | Язык текста коммита — English / Russian. Тип Conventional Commit остаётся стандартным (`feat`, `fix`, `docs` и т.д.) | `English` |
 | `gigacommit.caBundlePath` | Путь к PEM-файлу с пользовательскими сертификатами CA (необязательно) | *(пусто)* |
 
@@ -72,13 +72,13 @@ GigaCommit — это расширение для Visual Studio Code, испол
 | `GigaChat-2-Pro` | Умеренная | Рекомендуется — оптимальное соотношение скорости и качества |
 | `GigaChat-2-Max` | Самая высокая | Наиболее продвинутая, лучшая для сложного анализа |
 
-Рекомендуем использовать `GigaChat-2-Pro` по умолчанию: она обеспечивает наилучший баланс между качеством ответа и задержкой, без избыточности Max-версии.
+По умолчанию используется `GigaChat-2`: базовая модель с быстрым откликом.
 
 ```json
 {
   "gigacommit.authorizationKey": "ваш-base64-ключ-здесь",
   "gigacommit.scope": "GIGACHAT_API_PERS",
-  "gigacommit.model": "GigaChat-2-Pro",
+  "gigacommit.model": "GigaChat-2",
   "gigacommit.commitLanguage": "English"
 }
 ```

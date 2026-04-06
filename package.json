@@ -105,7 +105,7 @@
           "order": 3,
           "type": "string",
           "enum": ["GigaChat-2", "GigaChat-2-Pro", "GigaChat-2-Max"],
-          "default": "GigaChat-2-Pro",
+          "default": "GigaChat-2",
           "description": "GigaChat model to use. GigaChat-2 (standard), GigaChat-2-Pro (recommended), GigaChat-2-Max (most capable)"
         },
         "gigacommit.commitLanguage": {

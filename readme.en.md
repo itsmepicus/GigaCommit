@@ -37,7 +37,7 @@ Before using GigaCommit, you'll need to configure GigaChat OAuth credentials:
 |---|---|---|
 | `gigacommit.authorizationKey` | Base64-encoded authorization key (your API key for OAuth) | *required* |
 | `gigacommit.scope` | OAuth scope — dropdown: PERS / B2B / CORP. API base URL is selected automatically from this value | `GIGACHAT_API_PERS` |
-| `gigacommit.model` | GigaChat model — dropdown: GigaChat-2 / GigaChat-2-Pro / GigaChat-2-Max | `GigaChat-2-Pro` |
+| `gigacommit.model` | GigaChat model — dropdown: GigaChat-2 / GigaChat-2-Pro / GigaChat-2-Max | `GigaChat-2` |
 | `gigacommit.commitLanguage` | Language for the generated commit message text | `English` |
 | `gigacommit.caBundlePath` | Path to a PEM file with custom CA certificates (optional) | *(empty)* |
 
@@ -73,13 +73,13 @@ The extension selects the chat API base URL automatically:
 | `GigaChat-2-Pro` | Moderate | Recommended — balanced speed and quality |
 | `GigaChat-2-Max` | Highest | Most capable, best for complex reasoning |
 
-We recommend `GigaChat-2-Pro` as the default: it offers the best balance between response quality and latency for generating commit messages, without the overhead of the Max variant.
+The default is `GigaChat-2`: the base model with fast response times.
 
 ```json
 {
   "gigacommit.authorizationKey": "your-base64-encoded-key-here",
   "gigacommit.scope": "GIGACHAT_API_PERS",
-  "gigacommit.model": "GigaChat-2-Pro",
+  "gigacommit.model": "GigaChat-2",
   "gigacommit.commitLanguage": "English"
 }
 ```
