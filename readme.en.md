@@ -48,7 +48,7 @@ Before using GigaCommit, you'll need to configure GigaChat OAuth credentials:
 3. Copy your **Authorization Key**.
 4. Base64-encode it: `echo -n "key:value" | base64` (or use any online encoder).
 
-The `authorizationKey` should look like `NjE5MDhkYWUt...` (a Base64 string).
+The `authorizationKey` should look like `MDE5YWMx...` (a Base64 string).
 
 ### Which scope to use
 
