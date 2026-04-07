@@ -35,7 +35,7 @@ Before using GigaCommit, you'll need to configure GigaChat OAuth credentials:
 
 | Setting | Description | Default |
 |---|---|---|
-| `gigacommit.authorizationKey` | Base64-encoded authorization key (your API key for OAuth) | *required* |
+| `gigacommit.authorizationKey` | your Giga API key for OAuth | *required* |
 | `gigacommit.scope` | OAuth scope — dropdown: PERS / B2B / CORP. API base URL is selected automatically from this value | `GIGACHAT_API_PERS` |
 | `gigacommit.model` | GigaChat model — dropdown: GigaChat-2 / GigaChat-2-Pro / GigaChat-2-Max | `GigaChat-2` |
 | `gigacommit.commitLanguage` | Language for the generated commit message text | `English` |
@@ -46,9 +46,7 @@ Before using GigaCommit, you'll need to configure GigaChat OAuth credentials:
 1. Register your application in the [GigaChat developers portal](https://developers.sber.ru).
 2. Go to **Settings** → **API Keys**.
 3. Copy your **Authorization Key**.
-4. Base64-encode it: `echo -n "key:value" | base64` (or use any online encoder).
-
-The `authorizationKey` should look like `MDE5YWMx...` (a Base64 string).
+4. Paste it in "Authorization Key" option.
 
 ### Which scope to use
 
@@ -57,11 +55,6 @@ The `authorizationKey` should look like `MDE5YWMx...` (a Base64 string).
 | Personal | `GIGACHAT_API_PERS` | `https://gigachat.devices.sberbank.ru/api/v1` |
 | B2B | `GIGACHAT_API_B2B` | `https://api.giga.chat/v1` |
 | Corporate | `GIGACHAT_API_CORP` | `https://api.giga.chat/v1` |
-
-The extension selects the chat API base URL automatically:
-- `GIGACHAT_API_PERS` -> `https://gigachat.devices.sberbank.ru/api/v1`
-- `GIGACHAT_API_B2B` -> `https://api.giga.chat/v1`
-- `GIGACHAT_API_CORP` -> `https://api.giga.chat/v1`
 
 **Default:** `GIGACHAT_API_PERS`
 

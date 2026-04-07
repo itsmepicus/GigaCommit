@@ -16,7 +16,7 @@ GigaCommit — это расширение для Visual Studio Code, испол
 
 🔐 **Безопасность** — ваш код остаётся приватным; только diff отправляется в API GigaChat
 
-⚙️ **Настройка** — простая настройка учётных данных OAuth и конечных точек
+⚙️ **Настройка** — простая настройка для быстрого начала работы
 
 ## Установка
 
@@ -35,7 +35,7 @@ GigaCommit — это расширение для Visual Studio Code, испол
 
 | Параметр | Описание | По умолчанию |
 |---|---|---|
-| `gigacommit.authorizationKey` | Base64-закодированный ключ авторизации (ваш API-ключ для OAuth) | *обязательный* |
+| `gigacommit.authorizationKey` | ваш Giga API-ключ | *обязательный* |
 | `gigacommit.scope` | Охват OAuth — выбрать: PERS / B2B / CORP. Базовый URL API выбирается автоматически по значению | `GIGACHAT_API_PERS` |
 | `gigacommit.model` | Модель GigaChat — выбрать: GigaChat-2 / GigaChat-2-Pro / GigaChat-2-Max | `GigaChat-2` |
 | `gigacommit.commitLanguage` | Язык текста коммита — English / Russian. Тип Conventional Commit остаётся стандартным (`feat`, `fix`, `docs` и т.д.) | `English` |
@@ -46,6 +46,7 @@ GigaCommit — это расширение для Visual Studio Code, испол
 1. Зарегистрируйте приложение в [портале разработчиков GigaChat](https://developers.sber.ru).
 2. Перейдите в **Настройки** → **Ключи API**.
 3. Скопируйте свой **Ключ авторизации**.
+4. Вставьте его в пункт настроек "Authorization Key".
 
 Значение `authorizationKey` должно выглядеть как `MDE5YWMx...`
 
@@ -56,11 +57,6 @@ GigaCommit — это расширение для Visual Studio Code, испол
 | Персональный | `GIGACHAT_API_PERS` | `https://gigachat.devices.sberbank.ru/api/v1` |
 | B2B | `GIGACHAT_API_B2B` | `https://api.giga.chat/v1` |
 | Корпоративный | `GIGACHAT_API_CORP` | `https://api.giga.chat/v1` |
-
-Расширение автоматически выбирает базовый URL API чата:
-- `GIGACHAT_API_PERS` -> `https://gigachat.devices.sberbank.ru/api/v1`
-- `GIGACHAT_API_B2B` -> `https://api.giga.chat/v1`
-- `GIGACHAT_API_CORP` -> `https://api.giga.chat/v1`
 
 **По умолчанию:** `GIGACHAT_API_PERS`
 
