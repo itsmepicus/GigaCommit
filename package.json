@@ -15,9 +15,6 @@
   "description": "VSCode extension for AI-powered commits using GigaChat and Conventional Commits",
   "icon": "assets/icon.png",
   "main": "out/extension.js",
-  "activationEvents": [
-    "onCommand:gigacommit.makeCommit"
-  ],
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -p ./ --watch",
