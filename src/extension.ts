@@ -559,16 +559,49 @@ function limitItems(items: string[], maxItems: number): string {
 	return `${items.slice(0, maxItems).join(', ')}, ...`;
 }
 
-function excerptText(content: string, maxChars: number): string {
-	if (content.length <= maxChars) {
-		return content.trim();
+function extractAddedLines(content: string): string[] {
+	const lines: string[] = [];
+	for (const line of content.split('\n')) {
+		if (line.startsWith('+') && !line.startsWith('+++')) {
+			lines.push(line);
+		}
+	}
+	return lines;
+}
+
+async function getStagedDiff(repoRoot: string, gitPath: string): Promise<string | null> {
+	try {
+		const output = await runGit(repoRoot, ['diff', '--staged', '--', gitPath]);
+		return output || null;
+	} catch {
+		return null;
+	}
+}
+
+function excerptDiffContent(diffOutput: string, maxChars: number): string {
+	if (diffOutput.length <= maxChars) {
+		return diffOutput.trim();
+	}
+	const lines = diffOutput.split('\n');
+	const addedLines = extractAddedLines(diffOutput);
+
+	if (addedLines.length > 0) {
+		const diffHeader = lines
+			.filter((l) => l.startsWith('---') || l.startsWith('+++') || l.startsWith('@@'))
+			.join('\n');
+		const head = diffHeader ? `${diffHeader}\n` : '';
+		const result = `${head}${addedLines.join('\n')}`;
+		if (result.length <= maxChars) {
+			return result;
+		}
+		return result.slice(0, maxChars).trimEnd() + '\n[... more changes omitted ...]';
 	}
 
 	const headSize = Math.floor(maxChars * 0.65);
 	const tailSize = Math.floor(maxChars * 0.25);
-	const head = content.slice(0, headSize).trimEnd();
-	const tail = content.slice(-tailSize).trimStart();
-	return `${head}\n\n[... content omitted ...]\n\n${tail}`.trim();
+	const head = diffOutput.slice(0, headSize).trimEnd();
+	const tail = diffOutput.slice(-tailSize).trimStart();
+	return `${head}\n\n[... diff omitted ...]\n\n${tail}`.trim();
 }
 
 function extractCodeSymbols(content: string): string[] {
@@ -730,10 +763,12 @@ function categorizeFile(filePath: string): StagedFileAnalysis['category'] {
 }
 
 function buildFileAnalysis(
+	repoRoot: string | null,
 	filePath: string,
 	status: string,
 	stagedContent: string,
 	headContent: string | null,
+	stagedDiff: string | null,
 ): StagedFileAnalysis {
 	const category = categorizeFile(filePath);
 	const extension = path.extname(filePath).toLowerCase();
@@ -755,16 +790,24 @@ function buildFileAnalysis(
 		for (const item of summarizeCodeFileChange(headContent, stagedContent)) {
 			lines.push(`- ${item}`);
 		}
-		lines.push('Staged content excerpt:');
-		lines.push('```');
-		lines.push(excerptText(stagedContent, 2200));
+		lines.push('Staged diff:');
+		lines.push('```diff');
+		if (repoRoot && stagedDiff) {
+			lines.push(excerptDiffContent(stagedDiff, 2200));
+		} else {
+			lines.push('(diff unavailable)');
+		}
 		lines.push('```');
 	} else {
 		lines.push('Highlights:');
 		lines.push(`- text file updated (${stagedContent.split('\n').length} lines in staged version)`);
-		lines.push('Staged content excerpt:');
-		lines.push('```');
-		lines.push(excerptText(stagedContent, 1800));
+		lines.push('Staged diff:');
+		lines.push('```diff');
+		if (repoRoot && stagedDiff) {
+			lines.push(excerptDiffContent(stagedDiff, 1800));
+		} else {
+			lines.push('(diff unavailable)');
+		}
 		lines.push('```');
 	}
 
@@ -813,7 +856,8 @@ async function buildStagedChangeContext(
 
 		const headContent = await getGitText(repoRoot, `HEAD:${gitPath}`);
 		const status = detectFileStatus(file, headContent);
-		analyses.push(buildFileAnalysis(gitPath, status, stagedContent, isProbablyText(headContent) ? headContent : null));
+		const stagedDiff = await getStagedDiff(repoRoot, gitPath);
+		analyses.push(buildFileAnalysis(repoRoot, gitPath, status, stagedContent, isProbablyText(headContent) ? headContent : null, stagedDiff));
 	}
 
 	return {
@@ -883,43 +927,19 @@ function buildCommitPrompt(
 ): string {
 	if (commitLanguage === 'Russian') {
 		const lines = [
-			'Сгенерируй сообщение коммита git по структурированному анализу staged файлов.',
-			'Пиши summary и bullet points на русском языке в безличной или пассивной форме.',
-			'Тип и scope Conventional Commit оставляй стандартными, на английском и в нижнем регистре (например: feat, fix, docs, refactor, chore).',
+			'Сгенерируй сообщение git commit по анализу staged файлов.',
+			'Пиши на русском. Тип и scope Conventional Commit оставляй на английском в нижнем регистре.',
 			'',
-			'Строгие правила вывода:',
-			'1. Первая строка должна быть корректным Conventional Commit в нижнем регистре.',
-			'2. Формат первой строки должен быть строго таким: type(scope): краткое описание ИЛИ type: краткое описание.',
-			'3. Первая строка должна быть короткой и желательно не длиннее 72 символов.',
-			'4. Не оборачивай ответ в кавычки или markdown.',
-			'5. Не используй формулировки вроде "это изменение", "этот коммит" или "файл README.md", если это не требуется по смыслу.',
-			'6. Не пиши от первого лица и не используй формы вроде "добавил", "обновил", "исправил".',
-			'7. Используй краткие безличные или пассивные формулировки: добавлено, обновлены, исправлены, удалены, переработаны, улучшены.',
-			'8. Используй подходящие типы: feat, fix, docs, refactor, chore, test, ci, build, perf, style.',
+			'Формат вывода:',
+			'1. Первая строка: type(scope): краткое описание.',
+			'2. Первая строка должна быть короткой, в нижнем регистре, без markdown и кавычек.',
+			'3. После первой строки добавь пустую строку и 2-4 коротких bullet points.',
+			'4. Каждый bullet должен начинаться с "- " и описывать конкретное изменение.',
+			'5. Не пиши от первого лица. Используй безличные или пассивные формулировки: добавлено, обновлены, исправлены, удалены, переработаны, улучшены..',
+			'6. Выбирай подходящий тип: feat, fix, docs, refactor, chore, test, ci, build, perf, style.',
 		];
 
 		lines.push(
-			'9. После первой строки добавь пустую строку и затем 2-6 коротких bullet points.',
-			'10. Каждый bullet point должен начинаться с "- " и описывать конкретное изменение (новую функцию, отрефакторенную логику, обновлённые зависимости и т.д.).',
-			'11. Описывай все значимые изменения по типам: новые функции/файлы, изменения в логике, обновления зависимостей. Не ограничивайся только описанием версий.',
-			'12. Bullet points пиши в безличной или пассивной форме.'
-		);
-
-		lines.push(
-			'',
-			'Примеры правильного и неправильного выбора type:',
-			'✅ feat(parser): добавлен парсер конфигурации',
-			'❌ fix(parser): добавлен парсер конфигурации (использовал fix, хотя это новая функция)',
-			'',
-			'✅ fix(auth): исправлена проверка токена при истечении срока',
-			'❌ feat(auth): исправлена проверка токена при истечении срока (использовал feat, хотя это исправление)',
-			'',
-			'✅ refactor(db): перемещена логика подключения в отдельный модуль',
-			'✅ docs(api): обновлены описания эндпоинтов',
-			'✅ chore(deps): обновлены версии зависимостей',
-			'✅ test(utils): добавлены тесты для вспомогательных функций',
-			'✅ ci(workflow): добавлен шаг сборки в GitHub Actions',
-			'✅ style(components): отформатирован код по ESLint',
 			'',
 			'Список staged файлов:',
 			stagedFilesSummary,
@@ -934,41 +954,19 @@ function buildCommitPrompt(
 	}
 
 	const lines = [
-		'Generate a git commit message from the structured analysis of staged files.',
-		'Write the commit summary and bullet points in English. Keep the Conventional Commit type/scope in standard lowercase English.',
+		'Generate a git commit message from the staged file analysis.',
+		'Write in English. Keep the Conventional Commit type and scope in lowercase English.',
 		'',
-		'Strict output rules:',
-		'1. The first line must be a valid Conventional Commit in lowercase.',
-		'2. Format the first line exactly as: type(scope): short summary OR type: short summary.',
-		'3. The first line must be concise and ideally under 72 characters.',
-		'4. Do not wrap the first line in quotes or markdown.',
-		'5. Do not mention "this change", "this commit", or "README.md file" unless necessary.',
-		'6. Prefer specific verbs like add, update, fix, remove, refactor, improve.',
-		'7. Use these types when appropriate: feat, fix, docs, refactor, chore, test, ci, build, perf, style.',
+		'Output format:',
+		'1. First line: type(scope): short summary.',
+		'2. The first line must be lowercase, concise, and without quotes or markdown.',
+		'3. After the first line add a blank line and 2-4 short bullet points.',
+		'4. Each bullet must start with "- " and describe a specific change.',
+		'5. Prefer specific verbs like add, update, fix, remove, refactor, improve.',
+		'6. Use an appropriate type: feat, fix, docs, refactor, chore, test, ci, build, perf, style.',
 	];
 
 	lines.push(
-		'8. After the first line add a blank line and then 2-6 short bullet points.',
-		'9. Each bullet must start with "- " and describe specific changes: new functions/files, refactored logic, updated dependencies, etc.',
-		'10. Cover all meaningful changes, not just version bumps.',
-		'11. Keep bullets compact, for example: "- add commit preview QuickPick" or "- update package dependencies".'
-	);
-
-	lines.push(
-		'',
-		'Examples of correct type selection:',
-		'✅ feat(parser): add configuration file parser',
-		'❌ fix(parser): add configuration file parser (used fix for a new feature)',
-		'',
-		'✅ fix(auth): correct token expiry check',
-		'❌ feat(auth): correct token expiry check (used feat for a bug fix)',
-		'',
-		'✅ refactor(db): extract connection logic into separate module',
-		'✅ docs(api): update endpoint descriptions',
-		'✅ chore(deps): update dependency versions',
-		'✅ test(utils): add helper function tests',
-		'✅ ci(workflow): add build step to GitHub Actions',
-		'✅ style(components): format code per ESLint',
 		'',
 		'Staged files overview:',
 		stagedFilesSummary,
@@ -991,11 +989,11 @@ function buildChatPayload(
 ): object {
 	return {
 		model,
-		messages: [
-			{
-				role: 'system',
-				content: 'You write precise git commit messages. Follow the requested output format exactly and return only the commit message text.'
-			},
+			messages: [
+				{
+					role: 'system',
+					content: 'Write precise git commit messages and return only the commit message text.'
+				},
 			{
 				role: 'user',
 				content: buildCommitPrompt(changeContext, stagedFilesSummary, typeGuidance, commitLanguage)

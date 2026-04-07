@@ -2,7 +2,7 @@
   "name": "gigacommit",
   "displayName": "GigaCommit: AI-Powered Git Commits",
   "publisher": "itsmepicus",
-  "version": "1.0.3",
+  "version": "1.0.4",
 
   "repository": {
     "type": "git",
