@@ -1,14 +1,23 @@
 import * as vscode from 'vscode';
 import * as https from 'node:https';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { URL } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { showCommitPreview } from './commitPreview';
+
+const execFileAsync = promisify(execFile);
 
 // --- OAuth token cache (persisted in globalState) -------------------------
 
 interface TokenRecord {
 	token: string;
 	expiresAt: number; // ms since epoch
+	scope?: string;
+	authUrl?: string;
+	authKeyFingerprint?: string;
 }
 
 const TOKEN_STORAGE_KEY = 'gigachat.tokenRecord';
@@ -24,6 +33,10 @@ async function saveToken(state: vscode.Memento, record: TokenRecord) {
 
 async function clearToken(state: vscode.Memento) {
 	await state.update(TOKEN_STORAGE_KEY, undefined);
+}
+
+function getAuthKeyFingerprint(authorizationKey: string): string {
+	return createHash('sha256').update(authorizationKey).digest('hex');
 }
 
 // --- HTTP helpers ---------------------------------------------------------
@@ -80,6 +93,12 @@ interface ApiErrorInfo {
 	isRetryable401: boolean;
 }
 
+interface ExtractedApiErrorBody {
+	errorMessage: string;
+	errorCode?: number;
+	raw?: object;
+}
+
 function parseApiError(status: number, rawBody: string, context: 'auth' | 'chat'): ApiErrorInfo {
 	const body = extractErrorBody(rawBody);
 
@@ -89,7 +108,9 @@ function parseApiError(status: number, rawBody: string, context: 'auth' | 'chat'
 	switch (status) {
 		case 400:
 			if (context === 'auth') {
-				detail = 'Failed to obtain OAuth token';
+				detail = body.errorCode === 7
+					? 'Failed to obtain OAuth token — selected scope does not match the authorization key'
+					: 'Failed to obtain OAuth token';
 			} else {
 				detail = 'Bad request';
 			}
@@ -133,6 +154,10 @@ function parseApiError(status: number, rawBody: string, context: 'auth' | 'chat'
 		detail += ` — ${body.errorMessage}`;
 	}
 
+	if (context === 'auth' && body.errorCode === 7) {
+		detail += ' — set `gigacommit.scope` to the same access type that is enabled for this key in the Sber GigaChat developer portal (PERS / B2B / CORP)';
+	}
+
 	return {
 		shortReason: detail,
 		detail,
@@ -144,33 +169,42 @@ function parseApiError(status: number, rawBody: string, context: 'auth' | 'chat'
  * Try to extract a user-friendly error message from the API response body.
  * Supports multiple error envelope formats that GigaChat may return.
  */
-function extractErrorBody(raw: string): { errorMessage: string; raw?: object } {
-	const result: { errorMessage: string; raw?: object } = { errorMessage: '' };
+function extractErrorBody(raw: string): ExtractedApiErrorBody {
+	const result: ExtractedApiErrorBody = { errorMessage: '' };
 	try {
-		const obj = JSON.parse(raw);
+		const obj = JSON.parse(raw) as { [key: string]: unknown };
 		result.raw = obj;
+		if (typeof obj['code'] === 'number') {
+			result.errorCode = obj['code'];
+		}
 
 		// Format 1: { "description": "..." } — Sber token endpoint
-		if (typeof obj.description === 'string' && obj.description) {
-			result.errorMessage = obj.description;
+		if (typeof obj['description'] === 'string' && obj['description']) {
+			result.errorMessage = obj['description'];
 			return result;
 		}
 
 		// Format 2: { "error": { "message": "..." } } — OpenAI-compatible
-		if (obj.error && typeof obj.error.message === 'string') {
-			result.errorMessage = obj.error.message;
+		const nestedError = obj['error'];
+		if (
+			nestedError &&
+			typeof nestedError === 'object' &&
+			'message' in nestedError &&
+			typeof nestedError.message === 'string'
+		) {
+			result.errorMessage = nestedError.message;
 			return result;
 		}
 
 		// Format 3: { "message": "..." } — flat error
-		if (typeof obj.message === 'string' && obj.message) {
-			result.errorMessage = obj.message;
+		if (typeof obj['message'] === 'string' && obj['message']) {
+			result.errorMessage = obj['message'];
 			return result;
 		}
 
 		// Format 4: { "detail": "..." } — FastAPI-style
-		if (typeof obj.detail === 'string' && obj.detail) {
-			result.errorMessage = obj.detail;
+		if (typeof obj['detail'] === 'string' && obj['detail']) {
+			result.errorMessage = obj['detail'];
 			return result;
 		}
 
@@ -354,11 +388,23 @@ async function getValidAccessToken(
 	ca: Buffer[] | undefined
 ): Promise<string> {
 	const cached = loadToken(state);
-	if (cached && Date.now() < cached.expiresAt - TOKEN_REFRESH_BUFFER) {
+	const authKeyFingerprint = getAuthKeyFingerprint(authorizationKey);
+	const isReusableToken = cached &&
+		cached.scope === scope &&
+		cached.authUrl === authUrl &&
+		cached.authKeyFingerprint === authKeyFingerprint &&
+		Date.now() < cached.expiresAt - TOKEN_REFRESH_BUFFER;
+
+	if (isReusableToken) {
 		return cached.token;
 	}
 	const record = await fetchAccessToken(authUrl, authorizationKey, scope, ca);
-	await saveToken(state, record);
+	await saveToken(state, {
+		...record,
+		scope,
+		authUrl,
+		authKeyFingerprint,
+	});
 	return record.token;
 }
 
@@ -369,15 +415,475 @@ async function invalidateToken(state: vscode.Memento) {
 
 // --- Chat completions -----------------------------------------------------
 
-const DETAIL_DIFF_THRESHOLD = 4_000;
-
 type CommitLanguage = 'English' | 'Russian';
 
-function buildCommitPrompt(diffText: string, commitLanguage: CommitLanguage): string {
-	const isLargeDiff = diffText.length >= DETAIL_DIFF_THRESHOLD;
+interface GitLikeResourceState {
+	uri?: vscode.Uri;
+	resourceUri?: vscode.Uri;
+	renameUri?: vscode.Uri;
+}
+
+interface GitRepositoryLike {
+	rootUri?: vscode.Uri;
+}
+
+interface StagedFileAnalysis {
+	filePath: string;
+	status: string;
+	category: 'source' | 'package' | 'lockfile' | 'docs' | 'test' | 'ci' | 'other';
+	block: string;
+}
+
+function getResourcePath(resource: GitLikeResourceState): string {
+	const primaryUri = resource.uri ?? resource.resourceUri;
+	return primaryUri ? vscode.workspace.asRelativePath(primaryUri, false) : '(unknown file)';
+}
+
+function describeStagedFiles(stagedFiles: readonly GitLikeResourceState[]): string {
+	return stagedFiles
+		.map((file) => {
+			const fromPath = getResourcePath(file);
+			const toPath = file.renameUri ? vscode.workspace.asRelativePath(file.renameUri, false) : undefined;
+			return toPath ? `- ${fromPath} -> ${toPath}` : `- ${fromPath}`;
+		})
+		.join('\n');
+}
+
+function trimBlocksPreservingCoverage(
+	blocks: string[],
+	maxSize: number,
+	truncationNotice: string,
+	itemTruncationNotice: string,
+): string {
+	const normalizedBlocks = blocks
+		.map((block) => block.trim())
+		.filter((block) => block.length > 0);
+
+	if (normalizedBlocks.length === 0) {
+		return '';
+	}
+
+	const fullText = normalizedBlocks.join('\n\n');
+	if (fullText.length <= maxSize) {
+		return fullText;
+	}
+
+	if (normalizedBlocks.length === 1) {
+		const sliceSize = Math.max(0, maxSize - truncationNotice.length);
+		return `${normalizedBlocks[0].slice(0, sliceSize).trimEnd()}${truncationNotice}`;
+	}
+
+	const budget = Math.max(0, maxSize - truncationNotice.length);
+	const initialSliceSize = Math.max(250, Math.min(1200, Math.floor(budget / normalizedBlocks.length)));
+	const growthChunkSize = 300;
+	const slices = new Array<number>(normalizedBlocks.length).fill(0);
+
+	let remainingBudget = budget;
+	for (let index = 0; index < normalizedBlocks.length && remainingBudget > 0; index += 1) {
+		const sliceSize = Math.min(normalizedBlocks[index].length, initialSliceSize, remainingBudget);
+		slices[index] = sliceSize;
+		remainingBudget -= sliceSize;
+	}
+
+	while (remainingBudget > 0) {
+		let addedInRound = false;
+
+		for (let index = 0; index < normalizedBlocks.length && remainingBudget > 0; index += 1) {
+			const remainingBlockLength = normalizedBlocks[index].length - slices[index];
+			if (remainingBlockLength <= 0) {
+				continue;
+			}
+
+			const extraSlice = Math.min(growthChunkSize, remainingBlockLength, remainingBudget);
+			slices[index] += extraSlice;
+			remainingBudget -= extraSlice;
+			addedInRound = true;
+		}
+
+		if (!addedInRound) {
+			break;
+		}
+	}
+
+	const truncatedText = normalizedBlocks
+		.map((block, index) => {
+			const visiblePart = block.slice(0, slices[index]).trimEnd();
+			if (slices[index] >= block.length) {
+				return visiblePart;
+			}
+			return `${visiblePart}${itemTruncationNotice}`;
+		})
+		.join('\n\n');
+
+	return `${truncatedText}${truncationNotice}`;
+}
+
+function toGitRelativePath(repoRoot: string, resource: GitLikeResourceState): string | null {
+	const primaryUri = resource.uri ?? resource.resourceUri;
+	if (!primaryUri) {
+		return null;
+	}
+
+	return path.relative(repoRoot, primaryUri.fsPath).split(path.sep).join('/');
+}
+
+async function runGit(repoRoot: string, args: string[]): Promise<string> {
+	const result = await execFileAsync('git', args, {
+		cwd: repoRoot,
+		maxBuffer: 8 * 1024 * 1024,
+	});
+	return result.stdout;
+}
+
+async function getGitText(repoRoot: string, spec: string): Promise<string | null> {
+	try {
+		return await runGit(repoRoot, ['show', spec]);
+	} catch {
+		return null;
+	}
+}
+
+function isProbablyText(content: string | null): content is string {
+	return typeof content === 'string' && !content.includes('\u0000');
+}
+
+function limitItems(items: string[], maxItems: number): string {
+	if (items.length === 0) {
+		return 'none';
+	}
+
+	if (items.length <= maxItems) {
+		return items.join(', ');
+	}
+
+	return `${items.slice(0, maxItems).join(', ')}, ...`;
+}
+
+function excerptText(content: string, maxChars: number): string {
+	if (content.length <= maxChars) {
+		return content.trim();
+	}
+
+	const headSize = Math.floor(maxChars * 0.65);
+	const tailSize = Math.floor(maxChars * 0.25);
+	const head = content.slice(0, headSize).trimEnd();
+	const tail = content.slice(-tailSize).trimStart();
+	return `${head}\n\n[... content omitted ...]\n\n${tail}`.trim();
+}
+
+function extractCodeSymbols(content: string): string[] {
+	const patterns = [
+		/(?:^|\n)\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_]+)/g,
+		/(?:^|\n)\s*(?:export\s+)?class\s+([A-Za-z0-9_]+)/g,
+		/(?:^|\n)\s*(?:export\s+)?interface\s+([A-Za-z0-9_]+)/g,
+		/(?:^|\n)\s*(?:export\s+)?type\s+([A-Za-z0-9_]+)/g,
+		/(?:^|\n)\s*(?:export\s+)?const\s+([A-Za-z0-9_]+)\s*=/g,
+	];
+
+	const symbols = new Set<string>();
+	for (const pattern of patterns) {
+		for (const match of content.matchAll(pattern)) {
+			if (match[1]) {
+				symbols.add(match[1]);
+			}
+		}
+	}
+
+	return [...symbols];
+}
+
+function extractImportedModules(content: string): string[] {
+	const modules = new Set<string>();
+	for (const match of content.matchAll(/(?:^|\n)\s*import[\s\S]*?from\s+['"]([^'"]+)['"]/g)) {
+		if (match[1]) {
+			modules.add(match[1]);
+		}
+	}
+	return [...modules];
+}
+
+function getAddedItems(before: string[], after: string[]): string[] {
+	const beforeSet = new Set(before);
+	return after.filter((item) => !beforeSet.has(item));
+}
+
+function getRemovedItems(before: string[], after: string[]): string[] {
+	const afterSet = new Set(after);
+	return before.filter((item) => !afterSet.has(item));
+}
+
+function summarizePackageSectionChanges(
+	sectionName: string,
+	before: Record<string, string> | undefined,
+	after: Record<string, string> | undefined,
+): string[] {
+	const previous = before ?? {};
+	const next = after ?? {};
+	const packageNames = [...new Set([...Object.keys(previous), ...Object.keys(next)])].sort();
+	const changes: string[] = [];
+
+	for (const packageName of packageNames) {
+		if (!(packageName in previous)) {
+			changes.push(`${sectionName}: add ${packageName}@${next[packageName]}`);
+			continue;
+		}
+		if (!(packageName in next)) {
+			changes.push(`${sectionName}: remove ${packageName}`);
+			continue;
+		}
+		if (previous[packageName] !== next[packageName]) {
+			changes.push(`${sectionName}: update ${packageName} ${previous[packageName]} -> ${next[packageName]}`);
+		}
+	}
+
+	return changes;
+}
+
+function summarizePackageJsonChange(headContent: string | null, stagedContent: string): string[] {
+	try {
+		const before = headContent ? JSON.parse(headContent) as Record<string, unknown> : {};
+		const after = JSON.parse(stagedContent) as Record<string, unknown>;
+		const summary: string[] = [];
+
+		const previousVersion = typeof before['version'] === 'string' ? before['version'] : undefined;
+		const nextVersion = typeof after['version'] === 'string' ? after['version'] : undefined;
+		if (previousVersion !== nextVersion && nextVersion) {
+			summary.push(`package version: ${previousVersion ?? '(new)'} -> ${nextVersion}`);
+		}
+
+		for (const sectionName of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'] as const) {
+			summary.push(...summarizePackageSectionChanges(
+				sectionName,
+				before[sectionName] as Record<string, string> | undefined,
+				after[sectionName] as Record<string, string> | undefined,
+			));
+		}
+
+		const beforeScripts = before['scripts'] as Record<string, string> | undefined;
+		const afterScripts = after['scripts'] as Record<string, string> | undefined;
+		if (JSON.stringify(beforeScripts ?? {}) !== JSON.stringify(afterScripts ?? {})) {
+			summary.push('scripts section updated');
+		}
+
+		return summary.length > 0 ? summary : ['package metadata updated'];
+	} catch {
+		return ['package.json updated'];
+	}
+}
+
+function summarizeCodeFileChange(headContent: string | null, stagedContent: string): string[] {
+	const previousContent = headContent ?? '';
+	const beforeSymbols = extractCodeSymbols(previousContent);
+	const afterSymbols = extractCodeSymbols(stagedContent);
+	const addedSymbols = getAddedItems(beforeSymbols, afterSymbols);
+	const removedSymbols = getRemovedItems(beforeSymbols, afterSymbols);
+
+	const beforeImports = extractImportedModules(previousContent);
+	const afterImports = extractImportedModules(stagedContent);
+	const addedImports = getAddedItems(beforeImports, afterImports);
+	const removedImports = getRemovedItems(beforeImports, afterImports);
+
+	const summary: string[] = [];
+	if (!headContent) {
+		summary.push('new source file');
+	}
+	if (addedSymbols.length > 0) {
+		summary.push(`added symbols: ${limitItems(addedSymbols, 8)}`);
+	}
+	if (removedSymbols.length > 0) {
+		summary.push(`removed symbols: ${limitItems(removedSymbols, 8)}`);
+	}
+	if (addedImports.length > 0) {
+		summary.push(`new imports: ${limitItems(addedImports, 8)}`);
+	}
+	if (removedImports.length > 0) {
+		summary.push(`removed imports: ${limitItems(removedImports, 8)}`);
+	}
+	if (summary.length === 0) {
+		summary.push('source file implementation updated');
+	}
+
+	return summary;
+}
+
+function detectFileStatus(resource: GitLikeResourceState, headContent: string | null): string {
+	if (resource.renameUri) {
+		return 'renamed';
+	}
+	if (!headContent) {
+		return 'added';
+	}
+	return 'modified';
+}
+
+function categorizeFile(filePath: string): StagedFileAnalysis['category'] {
+	const normalizedPath = filePath.toLowerCase();
+	const extension = path.extname(normalizedPath);
+
+	if (normalizedPath.endsWith('package.json')) return 'package';
+	if (normalizedPath.endsWith('package-lock.json') || normalizedPath.endsWith('yarn.lock') || normalizedPath.endsWith('pnpm-lock.yaml')) return 'lockfile';
+	if (normalizedPath.includes('/test/') || normalizedPath.includes('/tests/') || normalizedPath.endsWith('.spec.ts') || normalizedPath.endsWith('.test.ts')) return 'test';
+	if (normalizedPath.startsWith('.github/') || normalizedPath.includes('/workflow') || normalizedPath.includes('/workflows/')) return 'ci';
+	if (normalizedPath.endsWith('.md')) return 'docs';
+	if (['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'].includes(extension)) return 'source';
+	return 'other';
+}
+
+function buildFileAnalysis(
+	filePath: string,
+	status: string,
+	stagedContent: string,
+	headContent: string | null,
+): StagedFileAnalysis {
+	const category = categorizeFile(filePath);
+	const extension = path.extname(filePath).toLowerCase();
+	const lines: string[] = [
+		`File: ${filePath}`,
+		`Status: ${status}`,
+	];
+
+	if (filePath.endsWith('package.json')) {
+		lines.push('Highlights:');
+		for (const item of summarizePackageJsonChange(headContent, stagedContent)) {
+			lines.push(`- ${item}`);
+		}
+	} else if (filePath.endsWith('package-lock.json') || filePath.endsWith('yarn.lock') || filePath.endsWith('pnpm-lock.yaml')) {
+		lines.push('Highlights:');
+		lines.push('- lockfile updated to reflect staged dependency changes');
+	} else if (['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'].includes(extension)) {
+		lines.push('Highlights:');
+		for (const item of summarizeCodeFileChange(headContent, stagedContent)) {
+			lines.push(`- ${item}`);
+		}
+		lines.push('Staged content excerpt:');
+		lines.push('```');
+		lines.push(excerptText(stagedContent, 2200));
+		lines.push('```');
+	} else {
+		lines.push('Highlights:');
+		lines.push(`- text file updated (${stagedContent.split('\n').length} lines in staged version)`);
+		lines.push('Staged content excerpt:');
+		lines.push('```');
+		lines.push(excerptText(stagedContent, 1800));
+		lines.push('```');
+	}
+
+	return {
+		filePath,
+		status,
+		category,
+		block: lines.join('\n'),
+	};
+}
+
+async function buildStagedChangeContext(
+	repo: GitRepositoryLike,
+	stagedFiles: readonly GitLikeResourceState[],
+): Promise<{ context: string; analyzedFiles: StagedFileAnalysis[] }> {
+	const repoRoot = repo.rootUri?.fsPath;
+	if (!repoRoot) {
+		return {
+			context: describeStagedFiles(stagedFiles),
+			analyzedFiles: [],
+		};
+	}
+
+	const analyses: StagedFileAnalysis[] = [];
+	for (const file of stagedFiles) {
+		const gitPath = toGitRelativePath(repoRoot, file);
+		if (!gitPath) {
+			continue;
+		}
+
+		const stagedContent = await getGitText(repoRoot, `:${gitPath}`);
+		if (!isProbablyText(stagedContent)) {
+			analyses.push({
+				filePath: gitPath,
+				status: 'binary or non-text',
+				category: 'other',
+				block: [
+					`File: ${gitPath}`,
+					'Status: binary or non-text staged file',
+					'Highlights:',
+					'- content omitted from AI context',
+				].join('\n'),
+			});
+			continue;
+		}
+
+		const headContent = await getGitText(repoRoot, `HEAD:${gitPath}`);
+		const status = detectFileStatus(file, headContent);
+		analyses.push(buildFileAnalysis(gitPath, status, stagedContent, isProbablyText(headContent) ? headContent : null));
+	}
+
+	return {
+		context: trimBlocksPreservingCoverage(
+			analyses.map((analysis) => analysis.block),
+			MAX_DIFF_SIZE,
+			'\n\n[... staged file analysis truncated to fit the request size limit]',
+			'\n[... file analysis truncated ...]',
+		),
+		analyzedFiles: analyses,
+	};
+}
+
+function buildCommitTypeGuidance(analyzedFiles: readonly StagedFileAnalysis[]): string {
+	if (analyzedFiles.length === 0) {
+		return '';
+	}
+
+	const sourceFiles = analyzedFiles.filter((file) => file.category === 'source');
+	const addedSourceFiles = sourceFiles.filter((file) => file.status === 'added');
+	const packageFiles = analyzedFiles.filter((file) => file.category === 'package' || file.category === 'lockfile');
+	const nonPackageFiles = analyzedFiles.filter((file) => file.category !== 'package' && file.category !== 'lockfile');
+
+	if (sourceFiles.length > 0 && addedSourceFiles.length > 0) {
+		return [
+			'Important type guidance:',
+			'- Source code files were added under the staged changes.',
+			'- Prefer feat as the Conventional Commit type.',
+			'- Do not use chore or chore(deps) as the main type when new source files were added.',
+			'- Mention dependency updates only as secondary bullet points if package files also changed.',
+		].join('\n');
+	}
+
+	if (sourceFiles.length > 0 && packageFiles.length > 0) {
+		return [
+			'Important type guidance:',
+			'- Source code files changed together with package files.',
+			'- Do not classify the commit as dependency-only chore(deps).',
+			'- Prefer feat, fix, or refactor based on the source code changes; dependency updates are secondary.',
+		].join('\n');
+	}
+
+	if (sourceFiles.length > 0) {
+		return [
+			'Important type guidance:',
+			'- Source code files changed.',
+			'- Prefer feat, fix, or refactor instead of chore unless the changes are purely tooling.',
+		].join('\n');
+	}
+
+	if (packageFiles.length > 0 && nonPackageFiles.length === 0) {
+		return [
+			'Important type guidance:',
+			'- Only package manifest or lock files changed.',
+			'- Prefer chore(deps) if the changes are mainly dependency or package metadata updates.',
+		].join('\n');
+	}
+
+	return '';
+}
+
+function buildCommitPrompt(
+	changeContext: string,
+	stagedFilesSummary: string,
+	typeGuidance: string,
+	commitLanguage: CommitLanguage,
+): string {
 	if (commitLanguage === 'Russian') {
 		const lines = [
-			'Сгенерируй сообщение коммита git по staged diff.',
+			'Сгенерируй сообщение коммита git по структурированному анализу staged файлов.',
 			'Пиши summary и bullet points на русском языке в безличной или пассивной форме.',
 			'Тип и scope Conventional Commit оставляй стандартными, на английском и в нижнем регистре (например: feat, fix, docs, refactor, chore).',
 			'',
@@ -392,33 +898,43 @@ function buildCommitPrompt(diffText: string, commitLanguage: CommitLanguage): st
 			'8. Используй подходящие типы: feat, fix, docs, refactor, chore, test, ci, build, perf, style.',
 		];
 
-		if (isLargeDiff) {
-			lines.push(
-				'9. Так как diff большой, после первой строки добавь пустую строку и затем 2-6 коротких bullet points.',
-				'10. Каждый bullet point должен начинаться с "- " и кратко описывать важный изменённый файл или область.',
-				'11. Bullet points тоже пиши на русском в безличной или пассивной форме.'
-			);
-		} else {
-			lines.push(
-				'9. Для небольших diff возвращай только первую строку, без body и без bullet points.'
-			);
-		}
+		lines.push(
+			'9. После первой строки добавь пустую строку и затем 2-6 коротких bullet points.',
+			'10. Каждый bullet point должен начинаться с "- " и описывать конкретное изменение (новую функцию, отрефакторенную логику, обновлённые зависимости и т.д.).',
+			'11. Описывай все значимые изменения по типам: новые функции/файлы, изменения в логике, обновления зависимостей. Не ограничивайся только описанием версий.',
+			'12. Bullet points пиши в безличной или пассивной форме.'
+		);
 
 		lines.push(
 			'',
-			'Примеры:',
-			'docs(readme): обновлён workflow Source Control',
-			'feat(scm): добавлена кнопка GigaCommit',
+			'Примеры правильного и неправильного выбора type:',
+			'✅ feat(parser): добавлен парсер конфигурации',
+			'❌ fix(parser): добавлен парсер конфигурации (использовал fix, хотя это новая функция)',
 			'',
-			'Staged diff:',
-			diffText
+			'✅ fix(auth): исправлена проверка токена при истечении срока',
+			'❌ feat(auth): исправлена проверка токена при истечении срока (использовал feat, хотя это исправление)',
+			'',
+			'✅ refactor(db): перемещена логика подключения в отдельный модуль',
+			'✅ docs(api): обновлены описания эндпоинтов',
+			'✅ chore(deps): обновлены версии зависимостей',
+			'✅ test(utils): добавлены тесты для вспомогательных функций',
+			'✅ ci(workflow): добавлен шаг сборки в GitHub Actions',
+			'✅ style(components): отформатирован код по ESLint',
+			'',
+			'Список staged файлов:',
+			stagedFilesSummary,
+			'',
+			typeGuidance,
+			typeGuidance ? '' : '',
+			'Структурированный анализ staged файлов:',
+			changeContext
 		);
 
 		return lines.join('\n');
 	}
 
 	const lines = [
-		'Generate a git commit message from the staged diff.',
+		'Generate a git commit message from the structured analysis of staged files.',
 		'Write the commit summary and bullet points in English. Keep the Conventional Commit type/scope in standard lowercase English.',
 		'',
 		'Strict output rules:',
@@ -431,32 +947,48 @@ function buildCommitPrompt(diffText: string, commitLanguage: CommitLanguage): st
 		'7. Use these types when appropriate: feat, fix, docs, refactor, chore, test, ci, build, perf, style.',
 	];
 
-	if (isLargeDiff) {
-		lines.push(
-			'8. Because the diff is large, add a blank line after the first line and then 2-6 short bullet points.',
-			'9. Each bullet must start with "- " and briefly describe an important changed file or area.',
-			'10. Keep bullets compact, for example: "- update README usage flow" or "- add SCM button icons".'
-		);
-	} else {
-		lines.push(
-			'8. For small diffs, return only the first line with no body and no bullet points.'
-		);
-	}
+	lines.push(
+		'8. After the first line add a blank line and then 2-6 short bullet points.',
+		'9. Each bullet must start with "- " and describe specific changes: new functions/files, refactored logic, updated dependencies, etc.',
+		'10. Cover all meaningful changes, not just version bumps.',
+		'11. Keep bullets compact, for example: "- add commit preview QuickPick" or "- update package dependencies".'
+	);
 
 	lines.push(
 		'',
-		'Examples:',
-		'docs(readme): update Source Control workflow',
-		'feat(scm): add GigaCommit action button',
+		'Examples of correct type selection:',
+		'✅ feat(parser): add configuration file parser',
+		'❌ fix(parser): add configuration file parser (used fix for a new feature)',
 		'',
-		'Staged diff:',
-		diffText
+		'✅ fix(auth): correct token expiry check',
+		'❌ feat(auth): correct token expiry check (used feat for a bug fix)',
+		'',
+		'✅ refactor(db): extract connection logic into separate module',
+		'✅ docs(api): update endpoint descriptions',
+		'✅ chore(deps): update dependency versions',
+		'✅ test(utils): add helper function tests',
+		'✅ ci(workflow): add build step to GitHub Actions',
+		'✅ style(components): format code per ESLint',
+		'',
+		'Staged files overview:',
+		stagedFilesSummary,
+		'',
+		typeGuidance,
+		typeGuidance ? '' : '',
+		'Structured staged file analysis:',
+		changeContext
 	);
 
 	return lines.join('\n');
 }
 
-function buildChatPayload(model: string, diffText: string, commitLanguage: CommitLanguage): object {
+function buildChatPayload(
+	model: string,
+	changeContext: string,
+	stagedFilesSummary: string,
+	typeGuidance: string,
+	commitLanguage: CommitLanguage,
+): object {
 	return {
 		model,
 		messages: [
@@ -466,7 +998,7 @@ function buildChatPayload(model: string, diffText: string, commitLanguage: Commi
 			},
 			{
 				role: 'user',
-				content: buildCommitPrompt(diffText, commitLanguage)
+				content: buildCommitPrompt(changeContext, stagedFilesSummary, typeGuidance, commitLanguage)
 			}
 		]
 	};
@@ -512,12 +1044,26 @@ function getApiBaseUrlForScope(scope: GigaChatScope): string {
 	}
 }
 
-function formatBytes(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`;
-	return `${(bytes / 1024).toFixed(1)} KB`;
+// --- Commit ---------------------------------------------------------------
+
+/**
+ * Extract the short (first line) version from commit message content.
+ */
+function extractShortMessage(fullMessage: string): string {
+	const firstLine = fullMessage.trim().split('\n')[0].trim();
+	// Remove markdown code fences if present
+	return firstLine.replace(/^```+/g, '').replace(/```+$/g, '').trim();
 }
 
-// --- Commit ---------------------------------------------------------------
+/**
+ * Clean the commit message from markdown code fences that LLM might add.
+ */
+function cleanCommitMessage(message: string): string {
+	return message
+		.replace(/^```[a-z]*\s*/m, '') // opening fence
+		.replace(/\s*```\s*$/, '')    // closing fence
+		.trim();
+}
 
 async function makeAiCommit(state: vscode.Memento) {
 	const config = vscode.workspace.getConfiguration('gigacommit');
@@ -563,31 +1109,16 @@ async function makeAiCommit(state: vscode.Memento) {
 		vscode.window.showWarningMessage('No staged changes to commit.');
 		return;
 	}
-
-	// --- Get real staged diff (not full file contents) ---
-	// repo.diff(true) calls `git diff --cached` under the hood.
-	// Git already marks binary files as "Binary files a/.. and b/.. differ",
-	// so the LLM only gets textual diff — never raw binary data.
-	let diffText: string;
-	try {
-		diffText = await repo.diff(true);
-	} catch {
-		vscode.window.showWarningMessage('Could not retrieve staged diff from Git.');
+	const stagedFilesSummary = describeStagedFiles(stagedFiles as readonly GitLikeResourceState[]);
+	const { context: changeContext, analyzedFiles } = await buildStagedChangeContext(
+		repo as GitRepositoryLike,
+		stagedFiles as readonly GitLikeResourceState[],
+	);
+	if (!changeContext.trim()) {
+		vscode.window.showWarningMessage('Could not build staged file analysis for the commit message.');
 		return;
 	}
-
-	if (!diffText.trim()) {
-		vscode.window.showWarningMessage('No staged changes to commit.');
-		return;
-	}
-
-	// --- Size guard ---
-	if (diffText.length > MAX_DIFF_SIZE) {
-		const message = `Staged diff is too large (${formatBytes(diffText.length)}) for one request. Proceed with a truncated diff?`;
-		const choice = await vscode.window.showWarningMessage(message, 'Proceed (truncated)', 'Cancel');
-		if (choice !== 'Proceed (truncated)') return;
-		diffText = diffText.substring(0, MAX_DIFF_SIZE) + '\n\n[... diff truncated due to size limit]';
-	}
+	const typeGuidance = buildCommitTypeGuidance(analyzedFiles);
 
 	// --- Get token (cached, persists across VS Code sessions) ---
 	vscode.window.showInformationMessage('Preparing GigaChat request...');
@@ -609,7 +1140,7 @@ async function makeAiCommit(state: vscode.Memento) {
 	// --- Send chat completion ---
 	vscode.window.showInformationMessage('Generating AI commit message...');
 
-	const payload = buildChatPayload(model, diffText, commitLanguage);
+	const payload = buildChatPayload(model, changeContext, stagedFilesSummary, typeGuidance, commitLanguage);
 	let response: HttpResult;
 	try {
 		response = await sendChatCompletion(apiBaseUrl, accessToken, payload, ca);
@@ -654,8 +1185,17 @@ async function makeAiCommit(state: vscode.Memento) {
 			return;
 		}
 
-		const commitMessage = data.choices[0].message.content.trim();
-		repo.inputBox.value = commitMessage;
+		const rawMessage = cleanCommitMessage(data.choices[0].message.content.trim());
+		const shortMessage = extractShortMessage(rawMessage);
+
+		const selected = await showCommitPreview({
+			short: shortMessage,
+			detailed: rawMessage,
+		});
+
+		if (selected === null) return;
+
+		repo.inputBox.value = selected;
 		vscode.window.showInformationMessage('Commit message inserted into Source Control input.');
 	} catch (error) {
 		vscode.window.showErrorMessage(`Failed to process response: ${(error as Error).message}`);
